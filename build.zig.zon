@@ -1,0 +1,44 @@
+.{
+    .name = .hold,
+    .version = "0.0.0",
+    .minimum_zig_version = "0.17.0",
+    .fingerprint = 0x1fca0d077a62d08e,
+    // What a consumer fetches: the module and its documents. The tests,
+    // benchmarks, examples and CI stay in the repository.
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "CHANGELOG.md",
+        "LICENSE",
+        "README.md",
+    },
+    .dependencies = .{
+        .aegis = .{
+            .url = "git+https://github.com/pedronaugusto/aegis?ref=v0.1.17#58751d5713c134b890d0fe0e65be95c289b84983",
+            .hash = "aegis-0.1.17-rsxouvg5CABaJmNEkRXQIkVJ6JqVOG7NN60ctSBvSzO_",
+        },
+        .warp = .{
+            .url = "git+https://github.com/pedronaugusto/warp?ref=v0.4.3#e9ee3d8c277ac32ba4c16544a8849bedf41bfb2b",
+            .hash = "warp-0.4.3-JASxFSNwEQBiJfBqB-hDA0nGh5I0KVMnt79cTfL_gxrP",
+        },
+        .airlock = .{
+            .url = "git+https://github.com/pedronaugusto/airlock?ref=v0.5.4#72d37e0d3610feb51833e783e52e6b1fd8e3ce5f",
+            .hash = "airlock-0.5.4-rfvu6EfLBgApPL56FpTgupBqZNf0bWqKDfrzgBjbOXyY",
+        },
+        .xenoglyph = .{
+            .url = "git+https://github.com/pedronaugusto/xenoglyph?ref=v0.4.2#8aed75bd7544bae9858799f0f29e2eab1e3b2801",
+            .hash = "xenoglyph-0.4.2-YKXZla8pGwCdQVFVWrrij3Eu8CZreypuVrHD_jsDTwAo",
+        },
+    },
+    .dev_dependencies = .{
+        .shakedown = .{
+            .url = "git+https://github.com/pedronaugusto/shakedown?ref=v0.4.17#b96c548a2fed2a4cc8b9d790fdbf29332b056f9d",
+            .hash = "shakedown-0.4.17-BR8U41SzFgBFNel0aa2pn9ELQvUHoVDmnXOWslP0wHV7",
+        },
+        .preflight = .{
+            .url = "git+https://github.com/pedronaugusto/preflight?ref=v0.17.1#b19c0d492b15fc7fde718ab25373447694c78c50",
+            .hash = "preflight-0.17.1-LX1Zwqg1EgC-7oVo97gFensj6cY8L4EtORwTUKLeqiYF",
+        },
+    },
+}
