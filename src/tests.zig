@@ -19,6 +19,7 @@ test {
     _ = @import("sevenz/aes.zig");
     _ = @import("sevenz/Archive.zig");
     _ = @import("testing/sevenz_test.zig");
+    _ = @import("testing/git_test.zig");
     _ = @import("testing/tar_test.zig");
     _ = @import("testing/zip_test.zig");
     _ = @import("name.zig");

@@ -201,3 +201,10 @@ pub const sevenz = [_]Case{
     .{ .name = "sevenz/bsdtar38-store.7z", .archive = @embedFile("sevenz/bsdtar38-store.7z"), .manifest = @embedFile("sevenz/bsdtar38-store.7z.manifest") },
     .{ .name = "sevenz/bsdtar38-zstd.7z", .archive = @embedFile("sevenz/bsdtar38-zstd.7z"), .manifest = @embedFile("sevenz/bsdtar38-zstd.7z.hold") },
 };
+
+/// git's own archives of one tree (git/make.sh): hold's writers must give
+/// them byte for byte.
+pub const git = struct {
+    pub const tar = @embedFile("git/tree.tar");
+    pub const zip_store = @embedFile("git/tree-store.zip");
+};

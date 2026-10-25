@@ -27,4 +27,13 @@ ZIG
   block tar libarchive/*.tar tar/*.tar
   block zip libarchive/*.zip libarchive/*.zipx zip/*.zip
   block sevenz libarchive/*.7z sevenz/*.7z
+  cat <<'ZIG'
+
+/// git's own archives of one tree (git/make.sh): hold's writers must give
+/// them byte for byte.
+pub const git = struct {
+    pub const tar = @embedFile("git/tree.tar");
+    pub const zip_store = @embedFile("git/tree-store.zip");
+};
+ZIG
 } > testdata.zig
