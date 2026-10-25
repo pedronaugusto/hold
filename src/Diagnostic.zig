@@ -47,6 +47,9 @@ pub const Reason = enum {
     unsafe_link,
     through_link,
     special,
+    /// A file or directory the filesystem failed to write, publish or
+    /// sync; the entry is the one it came from.
+    filesystem,
 };
 
 /// Fills the diagnostic, when there is one.

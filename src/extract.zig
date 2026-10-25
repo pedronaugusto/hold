@@ -1,9 +1,10 @@
 //! Extraction into a directory, for every format, with the hostile-input
 //! rules on (design §3): names checked, parents opened a component at a
 //! time without following links, files written through airlock (a temp
-//! beside the name, published by rename), links created after every file
-//! and only where they stay inside, specials refused, permissions as
-//! Python's `data` filter leaves them, every byte bounded.
+//! beside the name, published by rename, `batch_len` at a time under one
+//! barrier), links created after every file and only where they stay
+//! inside, specials refused, permissions as Python's `data` filter leaves
+//! them, every byte bounded.
 const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
@@ -109,21 +110,48 @@ pub const Error = error{
 } || FsError;
 
 /// The filesystem's errors, from the calls extraction makes.
-pub const FsError = airlock.CreateError || airlock.Pending.CommitError || airlock.SymLinkError || Io.Dir.OpenError || Io.Dir.CreateDirError ||
+pub const FsError = airlock.CreateError || airlock.Batch.Error || airlock.SymLinkError || Io.Dir.OpenError || Io.Dir.CreateDirError ||
     Io.Dir.HardLinkError || Io.Dir.DeleteFileError || Io.Dir.SetTimestampsError || Io.Dir.SetFilePermissionsError || Io.File.WritePositionalError || Io.Writer.Error;
+
+/// How many files and directories one airlock batch makes durable
+/// together. Each file's temp and parent stay open until its batch
+/// commits, so a batch holds about twice this many descriptors.
+pub const batch_len = 32;
 
 /// Extracts every entry of `source` into `dir`.
 pub fn extract(io: Io, gpa: Allocator, dir: Io.Dir, source: Source, options: Options) Error!Summary {
-    var x: Extraction = .{ .io = io, .gpa = gpa, .root = dir, .options = options, .walk = .{ .source = source } };
+    const publish = try gpa.create(Publish);
+    defer gpa.destroy(publish);
+    publish.* = .{ .batch = .init(&publish.slots) };
+    var x: Extraction = .{ .io = io, .gpa = gpa, .root = dir, .options = options, .walk = .{ .source = source }, .publish = publish };
     defer x.deinit();
     while (try x.walk.next(io, gpa, options)) |item| {
         try io.checkCancel();
         try x.one(item);
     }
+    // Every file is published before a hard link may name it.
+    try x.commit();
     try x.links();
     try x.directories();
+    try x.commit();
     return x.summary;
 }
+
+/// The batch files and directories are made durable in: its slots, the
+/// pendings it holds, and for each slot the entry it came from.
+const Publish = struct {
+    slots: [batch_len]airlock.Batch.Slot = undefined,
+    pendings: [batch_len]airlock.Pending = undefined,
+    entries: [batch_len]u64 = undefined,
+    batch: airlock.Batch,
+    used: u32 = 0,
+    pending_count: u32 = 0,
+    /// Parents of this batch's pendings, open until it commits: a pending
+    /// is renamed through the directory it was created in.
+    held: std.ArrayList(Io.Dir) = .empty,
+    /// The last directory added, so a run of entries in one adds it once.
+    last_dir: ?[]const u8 = null,
+};
 
 const Extraction = struct {
     io: Io,
@@ -131,6 +159,7 @@ const Extraction = struct {
     root: Io.Dir,
     options: Options,
     walk: Walk,
+    publish: *Publish,
     summary: Summary = .{},
     /// The deferred work's strings.
     arena: std.heap.ArenaAllocator.State = .{},
@@ -140,13 +169,17 @@ const Extraction = struct {
     hardlinks: std.ArrayList(Deferred) = .empty,
     dirs: std.ArrayList(DirFix) = .empty,
     /// The last parent opened, kept for the next entry in it.
-    cached: ?struct { path: []u8, dir: Io.Dir } = null,
+    cached: ?struct { path: []u8, dir: Io.Dir, held: bool } = null,
 
     const Deferred = struct { path: []const u8, target: []const u8, entry: u64 };
-    const DirFix = struct { path: []const u8, mode: ?u32, mtime: ?Io.Timestamp };
+    const DirFix = struct { path: []const u8, mode: ?u32, mtime: ?Io.Timestamp, entry: u64 };
 
     fn deinit(x: *Extraction) void {
         x.walk.deinit();
+        // After a failure: the batch's pendings are discarded.
+        x.publish.batch.reset(x.io);
+        x.release();
+        x.publish.held.deinit(x.gpa);
         if (x.cached) |c| {
             c.dir.close(x.io);
             x.gpa.free(c.path);
@@ -180,7 +213,7 @@ const Extraction = struct {
             .directory => {
                 var d = try x.makeDirs(path);
                 d.close(x.io);
-                try x.dirs.append(x.gpa, .{ .path = try x.dupe(path), .mode = e.mode, .mtime = e.mtime });
+                try x.dirs.append(x.gpa, .{ .path = try x.dupe(path), .mode = e.mode, .mtime = e.mtime, .entry = x.walk.index });
                 x.summary.directories += 1;
             },
             .file => try x.file(path, e, item.contents.?),
@@ -202,13 +235,20 @@ const Extraction = struct {
         }
     }
 
-    /// A file, written to a temp beside its name and published by rename,
-    /// so a name that was a link is replaced, never followed.
+    /// A file, written to a temp beside its name and published by rename
+    /// when its batch commits, so a name that was a link is replaced,
+    /// never followed.
     fn file(x: *Extraction, path: []const u8, e: Entry, contents: *Io.Reader) Error!void {
+        try x.room();
         const split = splitPath(path);
         const parent = try x.parentOf(split.dir);
-        var pending = try airlock.create(x.io, parent, split.base, .{ .mode = .{ .exact = permissions(x.fileMode(e.mode)) } });
-        defer pending.discard(x.io);
+        const p = x.publish;
+        // The batch borrows the name until it commits.
+        const base = try x.dupe(split.base);
+        const pending = &p.pendings[p.pending_count];
+        pending.* = try airlock.create(x.io, parent, base, .{ .mode = .{ .exact = permissions(x.fileMode(e.mode)) } });
+        var in_batch = false;
+        defer if (!in_batch) pending.discard(x.io);
         var buffer: [64 * 1024]u8 = undefined;
         const w = pending.writer(x.io, &buffer);
         while (true) {
@@ -226,9 +266,63 @@ const Extraction = struct {
         if (x.options.times) if (e.mtime) |t| {
             try pending.file().setTimestamps(x.io, .{ .modify_timestamp = .{ .new = t }, .access_timestamp = .init(e.atime) });
         };
-        _ = try pending.commit(x.io, .{ .level = x.options.level });
+        p.batch.addPending(x.io, pending, .replace) catch unreachable; // unreachable: `room` made space
+        in_batch = true;
+        p.pending_count += 1;
+        x.added(x.walk.index);
+        x.cached.?.held = true;
         try x.written.put(x.gpa, try x.dupe(path), {});
         x.summary.files += 1;
+    }
+
+    /// A free slot in the batch, committing it when full.
+    fn room(x: *Extraction) Error!void {
+        if (x.publish.used == batch_len) try x.commit();
+    }
+
+    fn added(x: *Extraction, entry: u64) void {
+        x.publish.entries[x.publish.used] = entry;
+        x.publish.used += 1;
+    }
+
+    /// A directory whose entries or metadata changed, made durable with
+    /// the batch. Its path is borrowed until the batch commits; nothing in
+    /// it is a link the extraction made, since links come after the files
+    /// and only at leaves.
+    fn touch(x: *Extraction, path: []const u8, entry: u64) Error!void {
+        if (x.options.level == .none) return;
+        if (x.publish.last_dir) |last| if (std.mem.eql(u8, last, path)) return;
+        try x.room();
+        const owned = try x.dupe(if (path.len == 0) "." else path);
+        x.publish.batch.addDirPath(x.root, owned) catch unreachable; // unreachable: `room` made space
+        x.added(entry);
+        x.publish.last_dir = owned;
+    }
+
+    /// Makes the batch durable at the level: renames its pendings in
+    /// order and syncs what it holds, under one barrier.
+    fn commit(x: *Extraction) Error!void {
+        const p = x.publish;
+        defer x.release();
+        _ = p.batch.commit(x.io, .{ .level = x.options.level }) catch |err| {
+            if (p.batch.failure()) |f| {
+                const entry = (f.slot.get(p.entries[0..p.used]) catch unreachable).*; // unreachable: a failed slot was added
+                Diagnostic.set(x.options.diagnostic, entry, 0, .filesystem);
+            }
+            p.batch.reset(x.io);
+            return err;
+        };
+    }
+
+    /// Closes the parents the batch held and empties it.
+    fn release(x: *Extraction) void {
+        const p = x.publish;
+        for (p.held.items) |d| d.close(x.io);
+        p.held.clearRetainingCapacity();
+        if (x.cached) |*c| c.held = false;
+        p.used = 0;
+        p.pending_count = 0;
+        p.last_dir = null;
     }
 
     fn fileMode(x: *const Extraction, mode: ?u32) u32 {
@@ -257,7 +351,9 @@ const Extraction = struct {
             };
             const split = splitPath(l.path);
             const parent = try x.parentOf(split.dir);
-            _ = try airlock.symLink(x.io, parent, l.target, split.base, .{ .sync = .{ .level = x.options.level } });
+            // Made durable with the batch, through its directory.
+            _ = try airlock.symLink(x.io, parent, l.target, split.base, .{ .sync = .{ .level = .none } });
+            try x.touch(split.dir, l.entry);
             x.summary.links += 1;
         }
         for (x.hardlinks.items) |l| {
@@ -275,6 +371,7 @@ const Extraction = struct {
                 else => |other| return other,
             };
             try from_dir.hardLink(from.base, to_dir, to.base, x.io, .{ .follow_symlinks = false });
+            try x.touch(to.dir, l.entry);
             x.summary.links += 1;
         }
     }
@@ -293,6 +390,7 @@ const Extraction = struct {
             if (x.options.times) if (d.mtime) |t| {
                 try parent.setTimestamps(x.io, split.base, .{ .follow_symlinks = false, .modify_timestamp = .{ .new = t } });
             };
+            try x.touch(d.path, d.entry);
         }
     }
 
@@ -301,13 +399,14 @@ const Extraction = struct {
     fn parentOf(x: *Extraction, path: []const u8) Error!Io.Dir {
         if (x.cached) |c| {
             if (std.mem.eql(u8, c.path, path)) return c.dir;
-            c.dir.close(x.io);
+            // A parent of a pending stays open until its batch commits.
+            if (c.held) try x.publish.held.append(x.gpa, c.dir) else c.dir.close(x.io);
             x.gpa.free(c.path);
             x.cached = null;
         }
         const d = try x.makeDirs(path);
         errdefer d.close(x.io);
-        x.cached = .{ .path = try x.gpa.dupe(u8, path), .dir = d };
+        x.cached = .{ .path = try x.gpa.dupe(u8, path), .dir = d, .held = false };
         return d;
     }
 
@@ -322,6 +421,7 @@ const Extraction = struct {
         if (path.len == 0) return d;
         var it = std.mem.splitScalar(u8, path, '/');
         while (it.next()) |part| {
+            const at = it.index orelse path.len + 1;
             const next = d.openDir(x.io, part, .{ .follow_symlinks = false }) catch |err| switch (err) {
                 error.FileNotFound => blk: {
                     if (!create) {
@@ -334,6 +434,12 @@ const Extraction = struct {
                             d.close(x.io);
                             return other;
                         },
+                    };
+                    // The directory it was made in gained a name.
+                    const start = at - 1 - part.len;
+                    x.touch(if (start == 0) "" else path[0 .. start - 1], x.walk.index) catch |t| {
+                        d.close(x.io);
+                        return t;
                     };
                     break :blk d.openDir(x.io, part, .{ .follow_symlinks = false }) catch |again| {
                         d.close(x.io);

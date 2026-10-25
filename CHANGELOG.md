@@ -21,5 +21,11 @@ follow [Semantic Versioning](https://semver.org/).
   The zip archives of Info-ZIP, bsdtar, Python, Go, 7-Zip and libarchive's
   test suite read as libarchive reads them, each divergence named; UnZip,
   libarchive, Python, Go and 7-Zip read the zips hold writes.
+- Extraction: `extract` writes any archive into a directory with the
+  hostile-input rules on: names checked, no write through a link, links
+  last and only inside, hard links only to files it wrote, specials
+  refused or skipped, permissions as Python's `data` filter, a total
+  bound. Files go through airlock, made durable 32 at a time in one
+  batch at the level asked.
 
 [Unreleased]: https://github.com/pedronaugusto/hold/commits/main

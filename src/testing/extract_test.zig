@@ -162,3 +162,52 @@ test "a zip extracts through its central directory" {
     var buf: [64]u8 = undefined;
     try std.testing.expectEqualStrings("zipped hello", try readFile(tmp.dir, "link", &buf));
 }
+
+test "durable extraction spans batches: every file, link and directory lands" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var items: std.ArrayList(Item) = .empty;
+    defer items.deinit(gpa);
+    var names: std.ArrayList([]u8) = .empty;
+    defer {
+        for (names.items) |n| gpa.free(n);
+        names.deinit(gpa);
+    }
+    // More files than three batches hold, in nested directories made on
+    // the way, with links to some of them.
+    const count = hold.Extract.batch_len * 3 + 5;
+    for (0..count) |i| {
+        const n = try gpa.print("d{d}/e{d}/f{d}", .{ i % 4, i % 3, i });
+        try names.append(gpa, n);
+        try items.append(gpa, .{ .entry = .{ .name = n }, .contents = n });
+    }
+    try items.append(gpa, .{ .entry = .{ .name = "d0/", .kind = .directory, .mode = 0o750 } });
+    try items.append(gpa, .{ .entry = .{ .name = "d0/e0/soft", .kind = .symlink, .link = "f0" } });
+    try items.append(gpa, .{ .entry = .{ .name = "hard", .kind = .hardlink, .link = "d1/e1/f1" } });
+    const archive = try tarOf(gpa, items.items);
+    defer gpa.free(archive);
+    const s = try extractTar(tmp.dir, archive, .{ .level = .data });
+    try std.testing.expectEqual(@as(u64, count), s.files);
+    try std.testing.expectEqual(@as(u64, 2), s.links);
+    var buf: [64]u8 = undefined;
+    for (names.items) |n| try std.testing.expectEqualStrings(n, try readFile(tmp.dir, n, &buf));
+    try std.testing.expectEqualStrings("d0/e0/f0", try readFile(tmp.dir, "d0/e0/soft", &buf));
+    try std.testing.expectEqualStrings("d1/e1/f1", try readFile(tmp.dir, "hard", &buf));
+}
+
+test "a failed extraction publishes nothing of its open batch" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const archive = try tarOf(gpa, &.{
+        .{ .entry = .{ .name = "first" }, .contents = "kept back" },
+        .{ .entry = .{ .name = "../out" }, .contents = "refused" },
+    });
+    defer gpa.free(archive);
+    try std.testing.expectError(error.UnsafeName, extractTar(tmp.dir, archive, .{ .level = .data }));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.statFile(std.testing.io, "first", .{}));
+    // No temp is left behind either.
+    var it = tmp.dir.iterate();
+    try std.testing.expectEqual(@as(?std.Io.Dir.Entry, null), try it.next(std.testing.io));
+}

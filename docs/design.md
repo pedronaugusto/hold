@@ -18,3 +18,12 @@ is allocated for it. A malformed header is `error.Invalid`, an archive that
 ends inside an entry `error.Truncated`, and a length past a limit
 `error.LimitExceeded`, each with a `Diagnostic` naming the entry, the offset
 and the reason.
+
+## Extraction
+
+`extract` checks every name (`name.check`), opens parents a component at a
+time without following links, writes each file to a temp beside its name
+and publishes it by rename, and makes links last, only where they stay
+inside. Files are made durable `batch_len` at a time in one airlock batch.
+The full rules, with the rivals' and the reasons, are on the design page
+in tychobook.
