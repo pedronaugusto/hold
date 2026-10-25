@@ -1,5 +1,5 @@
 //! Writes archives in every dialect hold writes, for the rivals' readers to
-//! check (testdata/interop.sh): `write <dir>` leaves <dir>/<dialect>.tar
+//! check (`bay interop-write`): `write <dir>` leaves <dir>/<dialect>.tar
 //! and prints, for each, the manifest libarchive must read from it.
 const std = @import("std");
 const hold = @import("hold");

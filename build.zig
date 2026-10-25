@@ -51,14 +51,25 @@ pub fn dev(b: *std.Build, tools: type) void {
     check.dependOn(&example.step);
     b.getInstallStep().dependOn(check);
 
-    // The writer behind testdata/interop.sh, where the rivals' readers
-    // read what hold writes; run by hand.
+    // The writer behind trials' interop check (hold/src/interop.zig), where
+    // the rivals' readers read what hold writes; run by hand.
     const interop = b.addExecutable(.{
         .name = "interop-write",
         .root_module = b.createModule(.{ .root_source_file = p.path("testdata/tools/write.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "hold", .module = module }} }),
     });
-    b.step("interop-write", "Build the writer testdata/interop.sh checks").dependOn(&b.addInstallArtifact(interop, .{}).step);
+    b.step("interop-write", "Build the writer trials' interop check runs").dependOn(&b.addInstallArtifact(interop, .{}).step);
     check.dependOn(&interop.step);
+
+    // testdata/testdata.zig, the interop corpus's index, written again
+    // after an archive or a `.hold` file comes or goes; run by hand.
+    const index = b.addExecutable(.{
+        .name = "testdata-index",
+        .root_module = b.createModule(.{ .root_source_file = p.path("testdata/tools/index.zig"), .target = target, .optimize = optimize }),
+    });
+    const index_run = b.addRunArtifact(index);
+    index_run.addDirectoryArg(p.path("testdata"));
+    b.step("testdata-index", "Write testdata/testdata.zig, the interop corpus's index").dependOn(&index_run.step);
+    check.dependOn(&index.step);
 
     tools.preflight.addCi(b, p, .{
         .tests = test_step,

@@ -6,6 +6,15 @@ follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Development: the rival programs and the scripts that drove the rivals'
+  tools (`bench/rivals.sh` and `bench/rivals/`, `testdata/make.sh`,
+  `testdata/interop.sh`, `testdata/git/make.sh`, `testdata/tools/manifest.c`)
+  moved to the private trials repository (`hold/`), the drivers rewritten in
+  Zig; the archives they wrote stay committed here. `testdata/index.sh` is
+  `testdata/tools/index.zig` (`bay testdata-index`).
+
 ## [0.1.0] - 2026-10-25
 
 ### Added

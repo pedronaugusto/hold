@@ -1,8 +1,8 @@
 //! Archives other tools wrote, embedded for the interop tests, each with
-//! the manifest libarchive 3.8.9 reads from it (testdata/tools/manifest.c),
-//! or, where hold reads it otherwise on purpose, the manifest hold reads
-//! and why (`.hold`). testdata/README.md says where each came from.
-//! Written by index.sh.
+//! the manifest libarchive 3.8.9 reads from it, or, where hold reads it
+//! otherwise on purpose, the manifest hold reads and why (`.hold`).
+//! testdata/README.md says where each came from. Written by
+//! tools/index.zig (`bay testdata-index`).
 
 pub const Case = struct { name: []const u8, archive: []const u8, manifest: []const u8 };
 
@@ -202,7 +202,7 @@ pub const sevenz = [_]Case{
     .{ .name = "sevenz/bsdtar38-zstd.7z", .archive = @embedFile("sevenz/bsdtar38-zstd.7z"), .manifest = @embedFile("sevenz/bsdtar38-zstd.7z.hold") },
 };
 
-/// git's own archives of one tree (git/make.sh): hold's writers must give
+/// git's own archives of one tree (git 2.56.0): hold's writers must give
 /// them byte for byte.
 pub const git = struct {
     pub const tar = @embedFile("git/tree.tar");

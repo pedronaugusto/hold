@@ -1,6 +1,6 @@
 //! relic's `git archive` writes through hold: hold's writers, given the
 //! entries git writes and git's spelling of each choice, must give git's
-//! bytes (testdata/git/make.sh, git 2.56.0).
+//! bytes (testdata/git, written by git 2.56.0).
 const std = @import("std");
 const hold = @import("../hold.zig");
 const testdata = @import("testdata");

@@ -86,13 +86,12 @@ by [preflight](https://github.com/pedronaugusto/preflight).
 `bay test` runs the suite, the fuzz targets over their corpora and the
 example. `bay parsers --fuzz` fuzzes every parser. The interop corpus under
 `testdata/` was written by the rivals' own tools, and every archive in it must
-read to the entries and bytes libarchive reads (testdata/README.md);
-`testdata/interop.sh` has GNU tar, libarchive, Python, Go and 7-Zip read what
-hold writes.
+read to the entries and bytes libarchive reads (testdata/README.md). The
+rivals' side (the programs that wrote the corpus, GNU tar, libarchive,
+Python, Go and 7-Zip reading what hold writes, and the benchmark comparison
+against libarchive and Go) lives in a separate comparison repository.
 
 `bay bench` times reading and writing tar, zip and 7z through shakedown.
-`bench/rivals.sh` times libarchive and Go on the same rows over the same
-files and prints the comparison.
 
 ## Licence
 

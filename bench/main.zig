@@ -5,9 +5,8 @@
 //!
 //!   hold-bench [--smoke] [--row <prefix>] [--corpus <dir>] [--emit <dir>]
 //!
-//! `--emit <dir>` writes the trees as files and stops: bench/rivals.sh
-//! archives them with bsdtar and 7-Zip, and libarchive's and Go's
-//! harnesses (bench/rivals/) time the same rows. `--corpus <dir>` reads
+//! `--emit <dir>` writes the trees as files and stops, for other tools to
+//! archive and other harnesses to time the same rows. `--corpus <dir>` reads
 //! those archives, so every reader reads the same bytes; without it the
 //! read rows read the archives hold writes, and 7z, which hold does not
 //! write, is left out. `bay bench` runs it; CI runs each row once.

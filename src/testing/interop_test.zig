@@ -8,7 +8,7 @@ const testdata = @import("testdata");
 const aegis = @import("aegis");
 const xenoglyph = @import("xenoglyph");
 
-/// FNV-1a over 64 bits, as testdata/tools/manifest.c hashes contents.
+/// FNV-1a over 64 bits, as the manifests' writer hashes contents.
 const Fnv = struct {
     h: u64 = 0xcbf29ce484222325,
     n: u64 = 0,
