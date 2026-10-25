@@ -197,7 +197,10 @@ pub fn add(w: *Writer, h: Header, bytes: []const u8) (BeginError || EndError)!vo
     const contents = if (h.entry.kind == .symlink and bytes.len == 0) h.entry.link else bytes;
     header.size = contents.len;
     const crc = warp.crc32(0, contents);
-    if (header.method == .stored or contents.len == 0 or !kindHasContents(h.entry.kind)) {
+    // A link's target is stored, as every writer stores it: it gains
+    // nothing compressed, and libarchive reads a target only stored or
+    // deflated.
+    if (header.method == .stored or contents.len == 0 or h.entry.kind != .file) {
         header.method = .stored;
         try w.start(header, null, .{ .crc = crc, .size = contents.len, .compressed = contents.len });
         try w.output.writeAll(contents);
@@ -306,10 +309,6 @@ const Out = struct {
     }
 };
 
-fn kindHasContents(kind: Entry.Kind) bool {
-    return kind == .file or kind == .symlink;
-}
-
 fn put(w: *Writer, bytes: []const u8) error{WriteFailed}!void {
     try w.output.writeAll(bytes);
     w.offset += bytes.len;
@@ -354,7 +353,7 @@ fn start(w: *Writer, h: Header, raw_info: ?Raw, known_in: ?Raw) BeginError!void 
     const e = h.entry;
     if (e.name.len > 0xffff or h.comment.len > 0xffff) return error.TooLarge;
     const known = known_in orelse raw_info;
-    const method: Method = if (kindHasContents(e.kind)) h.method else .stored;
+    const method: Method = if (e.kind == .file or raw_info != null) h.method else .stored;
     const size_known: ?u64 = if (known) |k| k.size else h.size;
     const descriptor = h.descriptor or known == null;
     const big_size = if (size_known) |n| n >= 0xffffffff else false;

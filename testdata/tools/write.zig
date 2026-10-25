@@ -62,7 +62,50 @@ pub fn main(init: std.process.Init) !void {
         try tw.finish();
         try fw.interface.flush();
     }
+    try writeZips(gpa, io, dir, &stdout.interface, &files);
     try stdout.interface.flush();
+}
+
+/// The same entries as zip: DEFLATE in memory, stored, zstd, streamed
+/// with data descriptors, and with ZIP64's fields forced.
+fn writeZips(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, out: *std.Io.Writer, files: []const File) !void {
+    const Variant = struct { name: []const u8, method: hold.zip.Method, streamed: bool = false, zip64: hold.zip.Writer.Zip64 = .auto };
+    const variants = [_]Variant{
+        .{ .name = "deflate.zip", .method = .deflate },
+        .{ .name = "stored.zip", .method = .stored },
+        .{ .name = "zstd.zip", .method = .zstd },
+        .{ .name = "streamed.zip", .method = .deflate, .streamed = true },
+        .{ .name = "zip64.zip", .method = .deflate, .streamed = true, .zip64 = .always },
+    };
+    for (variants) |v| {
+        const file = try dir.createFile(io, v.name, .{});
+        defer file.close(io);
+        var fw_buffer: [64 * 1024]u8 = undefined;
+        var fw = file.writer(io, &fw_buffer);
+        var zw: hold.zip.Writer = .init(gpa, &fw.interface, .{});
+        defer zw.deinit();
+        try out.print("== {s}\n", .{v.name});
+        for (files) |f| {
+            // zip holds no hard links or 1969 times.
+            if (f.entry.kind == .hardlink or f.entry.mtime.?.nanoseconds < 0) continue;
+            const h: hold.zip.Writer.Header = .{ .entry = f.entry, .method = v.method, .zip64 = v.zip64 };
+            if (v.streamed and f.entry.kind == .file) {
+                const w = try zw.begin(h);
+                try w.writeAll(f.contents);
+                try zw.end();
+            } else try zw.add(h, f.contents);
+            const e = f.entry;
+            const size = if (e.kind == .file) f.contents.len else 0;
+            var hash: u64 = 0xcbf29ce484222325;
+            if (e.kind == .file) for (f.contents) |c| {
+                hash = (hash ^ c) *% 0x100000001b3;
+            };
+            const link = if (e.kind == .symlink) e.link else "";
+            try out.print("{s} {d} {o} {d} {x:0>16} {s}\t{s}\n", .{ @tagName(e.kind), size, e.mode.?, @divFloor(e.mtime.?.nanoseconds, std.time.ns_per_s), hash, e.name, link });
+        }
+        try zw.finish("hold");
+        try fw.interface.flush();
+    }
 }
 
 fn rep(comptime c: u8, comptime n: usize) [n]u8 {

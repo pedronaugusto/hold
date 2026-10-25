@@ -10,8 +10,16 @@ follow [Semantic Versioning](https://semver.org/).
 
 - tar: `tar.Reader` reads v7, ustar, pax, GNU and sparse archives forward
   from any `std.Io.Reader`; `tar.Writer` writes ustar, pax and GNU.
+- zip: `zip.Archive` reads through the central directory (ZIP64,
+  prepended bytes, Info-ZIP's and NTFS's fields, overlapping entries
+  refused), `zip.Stream` reads forward (data descriptors), `zip.Writer`
+  writes (every field settable, store when larger, raw copy); WinZip AES
+  read; stored, DEFLATE and zstd through warp.
 - Interop: the tar archives of GNU tar, bsdtar, Python, Go, 7-Zip and
   libarchive's own test suite read to the entries and bytes libarchive
   reads; GNU tar, libarchive, Python, Go and 7-Zip read what hold writes.
+  The zip archives of Info-ZIP, bsdtar, Python, Go, 7-Zip and libarchive's
+  test suite read as libarchive reads them, each divergence named; UnZip,
+  libarchive, Python, Go and 7-Zip read the zips hold writes.
 
 [Unreleased]: https://github.com/pedronaugusto/hold/commits/main

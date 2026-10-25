@@ -8,7 +8,7 @@ whole archive or a whole entry. Compression comes from
 through [airlock](https://github.com/pedronaugusto/airlock), with the
 hostile-input rules on by default.
 
-Work in progress: tar is built; zip, extraction and 7z follow.
+Work in progress: tar and zip are built; extraction and 7z follow.
 
 ## Install
 
@@ -55,6 +55,12 @@ hostile-input rules.
   files) and sparse files in pax 0.0, 0.1 and 1.0. Writes ustar, pax and
   GNU. Every header field can be set, so another writer's bytes can be
   reproduced exactly. Sparse files are not written.
+- **zip**: reads through the central directory or forward, ZIP64 and data
+  descriptors both ways, Info-ZIP's Unicode path, Unix and timestamp fields
+  and NTFS times; entries whose data overlap are refused. WinZip AES (128-
+  and 256-bit) is read; ZipCrypto, PKWARE's strong encryption and AES-192 are
+  refused by name, and nothing is written encrypted. Methods: stored,
+  DEFLATE and zstd today, the others as warp gains them (bzip2 read only).
 
 ## Built with
 

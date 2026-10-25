@@ -17,6 +17,21 @@ in its `# ` lines, why.
   concatenated archives, archives libarchive refuses. The 8 MB
   `tar_pax_large_attr` is left out.
 
+- `zip/`: one tree zipped by Info-ZIP Zip 3.0 (`infozip-*`: DEFLATE, stored,
+  forced ZIP64, standard input with a data descriptor), bsdtar 3.7.4 and
+  3.8.10 (`bsdtar38-*`: zstd, bzip2, LZMA, xz), Python 3.13 `zipfile`, Go
+  1.27.1 `archive/zip` (data descriptors, a comment) and 7-Zip 26.04
+  (DEFLATE, Deflate64, bzip2, AES-128, AES-192, AES-256, ZipCrypto; password
+  `hold`). Manifests read with `TZ=UTC`.
+- `libarchive/zip*`: the zip archives of libarchive 3.8.1's test suite
+  (passwords `password` and `12345678`).
+
+Names are compared in NFC: libarchive's macOS build hands names out in NFD.
+A `.hold` file's reasons name each divergence; most are methods warp has no
+decoder for yet, and become libarchive's lines when warp has them.
+
 `interop.sh` checks the other direction: `bay interop-write` writes the same
 entries as ustar, pax and GNU, libarchive must read the manifest hold wrote,
-and GNU tar, Python, Go and 7-Zip must list and extract them.
+and GNU tar, Python, Go and 7-Zip must list and extract them; it writes zips
+(DEFLATE, stored, zstd, streamed with descriptors, forced ZIP64) that
+libarchive, UnZip, Python, Go and 7-Zip must read.
