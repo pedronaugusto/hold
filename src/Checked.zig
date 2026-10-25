@@ -62,7 +62,8 @@ fn discard(io_r: *Io.Reader, limit: Io.Limit) Io.Reader.Error!usize {
 fn take(c: *Checked, out: []u8) Io.Reader.Error!usize {
     const n = try c.inner.readSliceShort(out);
     if (n == 0) return c.fail(error.SizeMismatch);
-    c.crc.update(out[0..n]);
+    // Nothing to check against: a layer that only holds the size.
+    if (c.expected != null) c.crc.update(out[0..n]);
     c.left -= n;
     return n;
 }

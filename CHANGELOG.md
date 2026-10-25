@@ -33,5 +33,8 @@ follow [Semantic Versioning](https://semver.org/).
   `extract` takes it. The archives 7-Zip writes with those coders read as
   libarchive reads them; the rest of libarchive's 7z corpus waits on
   warp's LZMA, each named in a `.hold` file.
+- Benchmarks: `bench/main.zig` times tar, zip and 7z reading and writing
+  over a source-shaped tree and two large files; `bench/rivals.sh` times
+  libarchive and Go on the same rows over the same archives.
 
 [Unreleased]: https://github.com/pedronaugusto/hold/commits/main

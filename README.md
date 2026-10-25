@@ -90,6 +90,10 @@ read to the entries and bytes libarchive reads (testdata/README.md);
 `testdata/interop.sh` has GNU tar, libarchive, Python, Go and 7-Zip read what
 hold writes.
 
+`bay bench` times reading and writing tar, zip and 7z through shakedown.
+`bench/rivals.sh` times libarchive and Go on the same rows over the same
+files and prints the comparison.
+
 ## Licence
 
 MIT.
