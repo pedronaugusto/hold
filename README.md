@@ -8,7 +8,8 @@ whole archive or a whole entry. Compression comes from
 through [airlock](https://github.com/pedronaugusto/airlock), with the
 hostile-input rules on by default.
 
-Work in progress: tar and zip are built; extraction and 7z follow.
+Work in progress: tar, zip, 7z reading and extraction are built; most 7z
+archives wait on warp's LZMA (7-Zip encodes the header with it).
 
 ## Install
 
@@ -61,6 +62,15 @@ hostile-input rules.
   and 256-bit) is read; ZipCrypto, PKWARE's strong encryption and AES-192 are
   refused by name, and nothing is written encrypted. Methods: stored,
   DEFLATE and zstd today, the others as warp gains them (bzip2 read only).
+- **7z**: read: encoded headers, solid folders of chained coders, empty
+  streams and files, anti items, times and attributes, CRCs; 7z AES read
+  with a password. Coders: copy, DEFLATE and zstd today; LZMA, LZMA2,
+  bzip2, Deflate64 and the BCJ and Delta filters as warp gains them. PPMd,
+  BCJ2 and self-extracting archives are refused.
+- **Extraction**: `hold.extract` writes any of them into a directory with
+  the hostile-input rules on: names checked, no write through a link,
+  links last and only inside, specials refused, permissions as Python's
+  `data` filter, a total bound, files through airlock.
 
 ## Built with
 

@@ -15,6 +15,10 @@ test {
     _ = @import("zip/Stream.zig");
     _ = @import("zip/Writer.zig");
     _ = @import("zip/aes.zig");
+    _ = @import("sevenz/header.zig");
+    _ = @import("sevenz/aes.zig");
+    _ = @import("sevenz/Archive.zig");
+    _ = @import("testing/sevenz_test.zig");
     _ = @import("testing/tar_test.zig");
     _ = @import("testing/zip_test.zig");
     _ = @import("name.zig");

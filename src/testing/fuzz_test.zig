@@ -120,3 +120,51 @@ fn zipStream(_: void, smith: *std.testing.Smith) !void {
 test "fuzz_test: zip archives read forward" {
     try std.testing.fuzz({}, zipStream, .{ .corpus = &.{"PK\x03\x04"} });
 }
+
+/// A 7z archive around the fuzzer's bytes: the first two give the
+/// header's length, the rest are packed streams then the header, and the
+/// start header's CRCs are made right, so the header parser and the
+/// folders' decoders see the bytes and not a checksum refusal.
+fn sevenzArchive(_: void, smith: *std.testing.Smith) !void {
+    const gpa = std.testing.allocator;
+    var bytes: [4096]u8 = undefined;
+    const n = smith.slice(&bytes);
+    if (n < 2) return;
+    const rest = bytes[2..n];
+    const header_len = std.mem.readInt(u16, bytes[0..2], .little) % (rest.len + 1);
+    var archive_bytes: [32 + 4096]u8 = undefined;
+    const start = archive_bytes[0..32];
+    @memcpy(start[0..6], "7z\xbc\xaf\x27\x1c");
+    start[6] = 0;
+    start[7] = 4;
+    std.mem.writeInt(u64, start[12..20], rest.len - header_len, .little);
+    std.mem.writeInt(u64, start[20..28], header_len, .little);
+    std.mem.writeInt(u32, start[28..32], @import("warp").crc32(0, rest[rest.len - header_len ..]), .little);
+    std.mem.writeInt(u32, start[8..12], @import("warp").crc32(0, start[12..32]), .little);
+    @memcpy(archive_bytes[32..][0..rest.len], rest);
+    var archive = hold.sevenz.Archive.open(gpa, .{ .memory = archive_bytes[0 .. 32 + rest.len] }, .{ .limits = .{ .window = .fromRaw(1 << 20) } }) catch |e| switch (e) {
+        error.Invalid, error.Corrupt, error.Unsupported, error.UnsupportedMethod, error.UnsupportedEncryption, error.PasswordRequired, error.LimitExceeded, error.Truncated => return,
+        else => return e,
+    };
+    defer archive.deinit();
+    for (archive.entries(), 0..) |item, count| {
+        if (count == 32) break;
+        const r = archive.contents(item, &.{}) catch continue; // a refused entry is named by its error; the next is read
+        var sink_buffer: [256]u8 = undefined;
+        var sink: std.Io.Writer.Discarding = .init(&sink_buffer);
+        const got = r.streamRemaining(&sink.writer) catch {
+            try std.testing.expect(archive.err() != null);
+            continue;
+        };
+        try std.testing.expectEqual(item.entry.size, got);
+    }
+}
+
+test "fuzz_test: 7z archives" {
+    try std.testing.fuzz({}, sevenzArchive, .{
+        .corpus = &.{
+            // One copied file "a" of three bytes, "abc" (sevenz_test.zig).
+            "\x26\x00abc\x01\x04\x06\x00\x01\x09\x03\x00\x07\x0b\x01\x00\x01\x01\x00\x0c\x03\x00\x08\x0a\x01\xc2\x41\x24\x35\x00\x00\x05\x01\x11\x05\x00\x61\x00\x00\x00\x00\x00",
+        },
+    });
+}

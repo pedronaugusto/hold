@@ -1,0 +1,7 @@
+# The folder is DEFLATE under 7-Zip's x86 BCJ filter (coder 03030103), which warp has no decoder for yet (warp-dense's filters); hold refuses each entry by name. The lines become libarchive's when warp has it.
+directory 0 755 1577934245 cbf29ce484222325 dir/	
+error UnsupportedMethod
+error UnsupportedMethod
+error UnsupportedMethod
+error UnsupportedMethod
+error UnsupportedMethod

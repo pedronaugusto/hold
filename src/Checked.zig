@@ -17,6 +17,9 @@ crc: warp.Crc32 = .init,
 /// Private: the CRC-32 the archive declares, or null where it gives none
 /// (an AE-2 encrypted entry, authenticated instead).
 expected: ?u32,
+/// Private: whether the decoder must end with these bytes. A 7z entry
+/// that is one of several in a folder's stream is followed by the next.
+ends: bool = true,
 failure: ?Error = null,
 
 pub const Error = error{
@@ -64,10 +67,22 @@ fn take(c: *Checked, out: []u8) Io.Reader.Error!usize {
     return n;
 }
 
+/// The first `size` bytes of `inner`, which go on past them: a part of a
+/// stream another reader continues.
+pub fn initPart(inner: *Io.Reader, size: u64, expected: ?u32, buffer: []u8) Checked {
+    var c: Checked = .init(inner, size, expected, buffer);
+    c.ends = false;
+    return c;
+}
+
 /// After the declared bytes: the decoder must end there, and the CRC
 /// must match.
 fn end(c: *Checked) Io.Reader.Error {
     if (c.failure != null) return error.ReadFailed;
+    if (!c.ends) {
+        if (c.expected) |want| if (c.crc.final() != want) return c.fail(error.CrcMismatch);
+        return error.EndOfStream;
+    }
     _ = c.inner.peekByte() catch |e| switch (e) {
         error.EndOfStream => {
             if (c.expected) |want| if (c.crc.final() != want) return c.fail(error.CrcMismatch);

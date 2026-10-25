@@ -1,0 +1,2 @@
+# 7-Zip and bsdtar encode the header with LZMA (coder 030101), which warp has no decoder for yet (warp-dense, after Brotli and bzip2): hold refuses the archive by name at open. The lines become libarchive's when warp has LZMA.
+error UnsupportedMethod

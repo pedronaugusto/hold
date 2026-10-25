@@ -233,3 +233,69 @@ test "zip: the rivals' archives read as libarchive reads them" {
     }
     try std.testing.expectEqual(@as(usize, 0), failures);
 }
+
+/// A 7z archive's manifest, with each password tried in turn until none
+/// is wrong.
+fn sevenzManifest(gpa: std.mem.Allocator, archive_bytes: []const u8, out: *std.Io.Writer) !void {
+    var secrets: [passwords.len]aegis.SecretBytes = undefined;
+    for (&secrets, passwords) |*s, p| {
+        s.* = try .init(gpa, p.len);
+        try s.replace(p);
+    }
+    defer for (&secrets) |*s| s.deinit();
+    for (&secrets, 0..) |*secret, i| {
+        var attempt: std.Io.Writer.Allocating = .init(gpa);
+        defer attempt.deinit();
+        const wrong = try sevenzWith(gpa, archive_bytes, secret, &attempt.writer);
+        if (!wrong or i + 1 == secrets.len) return out.writeAll(attempt.written());
+    }
+}
+
+/// The manifest with one password; whether it was wrong anywhere.
+fn sevenzWith(gpa: std.mem.Allocator, archive_bytes: []const u8, password: *const aegis.SecretBytes, out: *std.Io.Writer) !bool {
+    var archive = hold.sevenz.Archive.open(gpa, .{ .memory = archive_bytes }, .{ .password = password }) catch |err| {
+        try out.print("error {s}\n", .{@errorName(err)});
+        return err == error.WrongPassword;
+    };
+    defer archive.deinit();
+    var wrong = false;
+    for (archive.entries()) |item| {
+        var fnv: Fnv = .{};
+        var link: std.Io.Writer.Allocating = .init(gpa);
+        defer link.deinit();
+        readSevenz(&archive, item, &fnv, &link.writer) catch |err| {
+            if (err == error.WrongPassword) wrong = true;
+            try out.print("error {s}\n", .{@errorName(err)});
+            continue;
+        };
+        const e = item.entry;
+        const secs = if (e.mtime) |t| @divFloor(t.nanoseconds, std.time.ns_per_s) else 0;
+        try out.print("{s} {d} {o} {d} {x:0>16} {s}\t{s}\n", .{ kindName(e.kind), fnv.n, e.mode.?, secs, fnv.h, e.name, link.written() });
+    }
+    return wrong;
+}
+
+fn readSevenz(archive: *hold.sevenz.Archive, item: hold.sevenz.Item, fnv: *Fnv, link: *std.Io.Writer) !void {
+    const r = try archive.contents(item, &.{});
+    var buf: [4096]u8 = undefined;
+    while (true) {
+        const n = r.readSliceShort(&buf) catch return archive.err() orelse error.ReadFailed;
+        if (item.entry.kind == .symlink) try link.writeAll(buf[0..n]) else fnv.update(buf[0..n]);
+        if (n < buf.len) break;
+    }
+}
+
+test "7z: the rivals' archives read as libarchive reads them" {
+    const gpa = std.testing.allocator;
+    var failures: usize = 0;
+    for (testdata.sevenz) |case| {
+        var got: std.Io.Writer.Allocating = .init(gpa);
+        defer got.deinit();
+        try sevenzManifest(gpa, case.archive, &got.writer);
+        if (!sameManifest(case.manifest, got.written())) {
+            failures += 1;
+            std.debug.print("\n== {s}\n-- libarchive\n{s}-- hold\n{s}", .{ case.name, case.manifest, got.written() });
+        }
+    }
+    try std.testing.expectEqual(@as(usize, 0), failures);
+}

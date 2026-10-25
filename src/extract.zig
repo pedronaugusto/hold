@@ -18,12 +18,15 @@ const name_ = @import("name.zig");
 const TarReader = @import("tar/Reader.zig");
 const ZipArchive = @import("zip/Archive.zig");
 const ZipStream = @import("zip/Stream.zig");
+const SevenzArchive = @import("sevenz/Archive.zig");
 
 /// The archive to extract, already opened.
 pub const Source = union(enum) {
     tar: *TarReader,
     zip: *ZipArchive,
     zip_stream: *ZipStream,
+    /// Its password, for AES folders, is the archive's own (`open`'s).
+    sevenz: *SevenzArchive,
 };
 
 pub const Options = struct {
@@ -37,7 +40,8 @@ pub const Options = struct {
     times: bool = true,
     /// The most bytes the extraction writes, all entries together.
     total: ?Limits.Bytes = null,
-    /// For AES-encrypted zip entries.
+    /// For AES-encrypted zip entries; a 7z archive takes its password
+    /// when it is opened.
     password: ?*const aegis.SecretBytes = null,
     diagnostic: ?*Diagnostic = null,
 };
@@ -204,6 +208,11 @@ const Extraction = struct {
 
     fn one(x: *Extraction, item: Walk.Item) Error!void {
         const e = item.entry;
+        // A 7z anti item deletes a file in an update: never extracted.
+        if (item.anti) {
+            x.summary.skipped += 1;
+            return;
+        }
         var buffer: [name_.max_len]u8 = undefined;
         const path = (name_.check(e.name, &buffer) catch return x.fail(.unsafe_name, error.UnsafeName)) orelse {
             // The destination itself (`./`): nothing to make.
@@ -497,12 +506,15 @@ const Walk = struct {
     local_extra: std.ArrayList(u8) = .empty,
     /// A zip symbolic link's target, read from its contents.
     link_buffer: std.ArrayList(u8) = .empty,
+    /// The next 7z item.
+    sevenz_next: usize = 0,
     gpa: Allocator = undefined,
 
     const Item = struct {
         entry: Entry,
         contents: ?*Io.Reader,
         link_contents: ?[]const u8 = null,
+        anti: bool = false,
     };
 
     fn deinit(w: *Walk) void {
@@ -549,6 +561,17 @@ const Walk = struct {
                 }
                 return item;
             },
+            .sevenz => |a| {
+                const items = a.entries();
+                if (w.sevenz_next == items.len) return null;
+                const it = items[w.sevenz_next];
+                w.sevenz_next += 1;
+                var item: Item = .{ .entry = it.entry, .contents = null, .anti = it.anti };
+                if (it.anti) return item;
+                item.contents = a.contents(it, &.{}) catch |err| return mapSevenz(err);
+                if (it.entry.kind == .symlink) item.link_contents = try w.readLink(item.contents.?, options);
+                return item;
+            },
         }
     }
 
@@ -579,6 +602,11 @@ const Walk = struct {
             },
             .zip => if (w.zip_open) if (w.zip_contents.err()) |e| return switch (e) {
                 error.Truncated => error.Truncated,
+                else => error.Corrupt,
+            },
+            .sevenz => |a| if (a.err()) |e| return switch (e) {
+                error.Truncated => error.Truncated,
+                error.WrongPassword => error.WrongPassword,
                 else => error.Corrupt,
             },
         }
@@ -615,6 +643,20 @@ fn mapContents(err: ZipArchive.ContentsError) Error {
         error.PasswordRequired => error.PasswordRequired,
         error.WrongPassword => error.WrongPassword,
         error.LimitExceeded => error.LimitExceeded,
+        error.Truncated => error.Truncated,
+        error.ReadFailed => error.ReadFailed,
+        error.OutOfMemory => error.OutOfMemory,
+    };
+}
+
+fn mapSevenz(err: SevenzArchive.ContentsError) Error {
+    return switch (err) {
+        error.Invalid => error.Invalid,
+        error.UnsupportedMethod => error.UnsupportedMethod,
+        error.UnsupportedEncryption => error.UnsupportedEncryption,
+        error.PasswordRequired => error.PasswordRequired,
+        error.LimitExceeded => error.LimitExceeded,
+        error.Corrupt => error.Corrupt,
         error.Truncated => error.Truncated,
         error.ReadFailed => error.ReadFailed,
         error.OutOfMemory => error.OutOfMemory,

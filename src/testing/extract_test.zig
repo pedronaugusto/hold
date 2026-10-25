@@ -211,3 +211,21 @@ test "a failed extraction publishes nothing of its open batch" {
     var it = tmp.dir.iterate();
     try std.testing.expectEqual(@as(?std.Io.Dir.Entry, null), try it.next(std.testing.io));
 }
+
+test "a 7z extracts, its solid folder read once in order" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const testdata = @import("testdata");
+    const bytes = for (testdata.sevenz) |c| {
+        if (std.mem.eql(u8, c.name, "sevenz/7zz-deflate.7z")) break c.archive;
+    } else unreachable; // unreachable: the index has it
+    var archive = try hold.sevenz.Archive.open(gpa, .{ .memory = bytes }, .{});
+    defer archive.deinit();
+    const s = try hold.extract(std.testing.io, gpa, tmp.dir, .{ .sevenz = &archive }, .{ .level = .data });
+    try std.testing.expectEqual(@as(u64, 4), s.files);
+    try std.testing.expectEqual(@as(u64, 1), s.links);
+    var buf: [64]u8 = undefined;
+    try std.testing.expectEqualStrings("hello\n", try readFile(tmp.dir, "dir/a.txt", &buf));
+    try std.testing.expectEqualStrings("hello\n", try readFile(tmp.dir, "link", &buf));
+}

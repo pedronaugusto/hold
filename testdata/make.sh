@@ -141,12 +141,32 @@ go run "$work/gozip.go" "$zout/go-deflate.zip"
 7zz a -tzip -snl -phold -mem=AES128 "$zout/7zz-aes128.zip" $zfiles > /dev/null
 7zz a -tzip -snl -phold -mem=AES192 "$zout/7zz-aes192.zip" $zfiles > /dev/null
 7zz a -tzip -snl -phold -mem=ZipCrypto "$zout/7zz-zipcrypto.zip" $zfiles > /dev/null
+
+# 7z: the same tree by 7-Zip, uncompressed headers so the coders warp has
+# are what decides; and by bsdtar 3.8's 7z writer.
+sout=$(dirname "$out")/sevenz
+mkdir -p "$sout"
+rm -f "$sout"/*.7z
+7zz a -snl -mhc=off -m0=Copy "$sout/7zz-copy.7z" $zfiles > /dev/null
+7zz a -snl -mhc=off -m0=Deflate "$sout/7zz-deflate.7z" $zfiles > /dev/null
+7zz a -snl -mhc=off -m0=Deflate -ms=off "$sout/7zz-deflate-nonsolid.7z" $zfiles > /dev/null
+7zz a -snl -mhc=off -m0=Deflate -mtc=on -mta=on "$sout/7zz-deflate-times.7z" $zfiles > /dev/null
+7zz a -snl -mhc=off -m0=Deflate64 "$sout/7zz-deflate64.7z" $zfiles > /dev/null
+7zz a -snl -mhc=off -m0=BZip2 "$sout/7zz-bzip2.7z" $zfiles > /dev/null
+7zz a -snl "$sout/7zz-lzma2.7z" $zfiles > /dev/null
+7zz a -snl -mhc=off -mf=BCJ -m0=Deflate "$sout/7zz-bcj-deflate.7z" $zfiles > /dev/null
+7zz a -snl -mhc=off -phold -m0=Copy "$sout/7zz-aes-copy.7z" $zfiles > /dev/null
+7zz a -snl -mhc=off -phold -m0=Deflate "$sout/7zz-aes-deflate.7z" $zfiles > /dev/null
+7zz a -snl -phold -mhe=on "$sout/7zz-aes-header.7z" $zfiles > /dev/null
+for c in store deflate bzip2 lzma1 lzma2 ppmd zstd; do
+  COPYFILE_DISABLE=1 "$(brew --prefix libarchive)/bin/bsdtar" --format 7zip --options 7zip:compression=$c -cf "$sout/bsdtar38-$c.7z" $zfiles
+done
 cd - > /dev/null
 
 # The manifests libarchive reads from each archive, here and in the
 # libarchive corpus (decoded from its test/*.uu by hand).
 P=$(brew --prefix libarchive)
 cc -O2 -I"$P/include" "$(dirname "$out")/tools/manifest.c" -L"$P/lib" -larchive -o "$work/manifest"
-for f in "$out"/*.tar "$(dirname "$out")"/libarchive/*.tar "$zout"/*.zip "$(dirname "$out")"/libarchive/*.zip "$(dirname "$out")"/libarchive/*.zipx; do
+for f in "$out"/*.tar "$(dirname "$out")"/libarchive/*.tar "$zout"/*.zip "$(dirname "$out")"/libarchive/*.zip "$(dirname "$out")"/libarchive/*.zipx "$sout"/*.7z "$(dirname "$out")"/libarchive/*.7z; do
   if [ -f "$f" ]; then TZ=UTC "$work/manifest" "$f" > "$f.manifest"; fi
 done

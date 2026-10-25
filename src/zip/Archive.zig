@@ -23,10 +23,7 @@ const Checked = @import("../Checked.zig");
 const Entry = @import("../Entry.zig");
 
 /// Where the archive's bytes are.
-pub const Source = union(enum) {
-    file: *Io.File.Reader,
-    memory: []const u8,
-};
+pub const Source = @import("../source.zig").Source;
 
 pub const Options = struct {
     limits: Limits = .{},
@@ -68,7 +65,7 @@ pub const OpenError = error{
 };
 
 pub fn open(gpa: Allocator, source: Source, options: Options) OpenError!Archive {
-    const size = try sourceSize(source);
+    const size = try source.size();
     var a: Archive = .{
         .gpa = gpa,
         .source = source,
@@ -210,16 +207,7 @@ pub fn contents(a: *Archive, c: *Contents, record: Record, buffer: []u8, options
         .zipcrypto, .strong => return a.failContents(record.offset, .unsupported_encryption, error.UnsupportedEncryption),
     }
     const data = try a.localData(record);
-    const input: *Io.Reader = switch (a.source) {
-        .file => |fr| blk: {
-            fr.seekTo(data) catch return error.ReadFailed;
-            break :blk &fr.interface;
-        },
-        .memory => |m| blk: {
-            c.file_view = .fixed(m[@intCast(data)..]);
-            break :blk &c.file_view;
-        },
-    };
+    const input = try a.source.readerAt(data, &c.file_view);
     c.stored = .init(input, record.compressed, &c.stored_buffer);
     var plain: *Io.Reader = &c.stored.interface;
     c.decrypt = null;
@@ -360,27 +348,8 @@ fn failContents(a: *const Archive, at: u64, reason: Diagnostic.Reason, e: anytyp
     return e;
 }
 
-fn sourceSize(source: Source) OpenError!u64 {
-    return switch (source) {
-        .file => |fr| fr.getSize() catch error.ReadFailed,
-        .memory => |m| m.len,
-    };
-}
-
-fn readAt(a: *Archive, offset: u64, out: []u8) error{ Truncated, ReadFailed }!void {
-    switch (a.source) {
-        .file => |fr| {
-            fr.seekTo(offset) catch return error.ReadFailed;
-            fr.interface.readSliceAll(out) catch |e| return switch (e) {
-                error.EndOfStream => error.Truncated,
-                error.ReadFailed => error.ReadFailed,
-            };
-        },
-        .memory => |m| {
-            if (offset > m.len or out.len > m.len - offset) return error.Truncated;
-            @memcpy(out, m[@intCast(offset)..][0..out.len]);
-        },
-    }
+fn readAt(a: *Archive, offset: u64, out: []u8) Source.Error!void {
+    return a.source.readAt(offset, out);
 }
 
 /// The end record: the last signature in the archive's last 64 KiB and 22

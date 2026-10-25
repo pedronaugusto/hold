@@ -1,0 +1,8 @@
+directory 0 755 1692172997 cbf29ce484222325 hidden_dir/	
+directory 0 555 1692172945 cbf29ce484222325 readonly_dir/	
+directory 0 755 1692173007 cbf29ce484222325 regular_dir/	
+directory 0 755 1692172969 cbf29ce484222325 system_dir/	
+file 7 644 1692173516 bea01422b5f77185 archive_file.txt	
+file 6 644 1692173523 a000c4df231528b9 hidden_file.txt	
+file 8 444 1692173557 9e0e972928236e97 readonly_file.txt	
+file 6 644 1692173569 bfb559c71c56b4fc system_file.txt	

@@ -10,6 +10,7 @@ pub const layers: []const gantry.rules.Layer = &.{
         "src/name.zig",
     } },
     .{ .name = "streams and codecs", .patterns = &.{
+        "src/source.zig",
         "src/Bounded.zig",
         "src/Checked.zig",
         "src/codec.zig",
@@ -32,9 +33,15 @@ pub const layers: []const gantry.rules.Layer = &.{
         "src/zip/Stream.zig",
         "src/zip/Writer.zig",
     } },
+    .{ .name = "7z header", .patterns = &.{
+        "src/sevenz/header.zig",
+        "src/sevenz/aes.zig",
+    } },
+    .{ .name = "7z", .patterns = &.{"src/sevenz/Archive.zig"} },
     .{ .name = "formats", .patterns = &.{
         "src/tar.zig",
         "src/zip.zig",
+        "src/sevenz.zig",
     } },
     .{ .name = "extraction", .patterns = &.{"src/extract.zig"} },
     .{ .name = "public", .patterns = &.{"src/hold.zig"} },

@@ -26,6 +26,14 @@ in its `# ` lines, why.
 - `libarchive/zip*`: the zip archives of libarchive 3.8.1's test suite
   (passwords `password` and `12345678`).
 
+- `sevenz/`: the zip tree by 7-Zip 26.05 (`7zz-*`, headers left plain:
+  copy, DEFLATE solid and not, times, Deflate64, bzip2, LZMA2, x86 BCJ, AES
+  with password `hold` on copy and DEFLATE and on the header) and bsdtar
+  3.8 (`bsdtar38-*`, every 7z compression it writes).
+- `libarchive/7zip_*`: the 7z archives of libarchive 3.8.1's test suite;
+  its three self-extractors are left out (hold reads no self-extractor).
+  Nearly all encode their header with LZMA and wait on warp.
+
 Names are compared in NFC: libarchive's macOS build hands names out in NFD.
 A `.hold` file's reasons name each divergence; most are methods warp has no
 decoder for yet, and become libarchive's lines when warp has them.

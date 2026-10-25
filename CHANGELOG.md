@@ -27,5 +27,11 @@ follow [Semantic Versioning](https://semver.org/).
   refused or skipped, permissions as Python's `data` filter, a total
   bound. Files go through airlock, made durable 32 at a time in one
   batch at the level asked.
+- 7z: `sevenz.Archive` reads encoded headers, solid folders of chained
+  coders, empty streams and files, anti items, times and attributes and
+  CRCs, and 7z AES with a password; copy, DEFLATE and zstd through warp.
+  `extract` takes it. The archives 7-Zip writes with those coders read as
+  libarchive reads them; the rest of libarchive's 7z corpus waits on
+  warp's LZMA, each named in a `.hold` file.
 
 [Unreleased]: https://github.com/pedronaugusto/hold/commits/main
