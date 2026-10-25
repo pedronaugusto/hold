@@ -1,3 +1,3 @@
-# libarchive's own test (test_read_format_gtar_sparse_skip_entry.c) expects a then b; 3.8.10 errors only when a's 10 GiB are read whole.
+# libarchive's own test (test_read_format_gtar_sparse_skip_entry.c) expects a then b; 3.8.9 errors only when a's 10 GiB are read whole.
 file 10737418244 664 1405126626 cf5b21ff0c25c367 a	
 file 4 664 1405131728 dd1276790c25c367 b	

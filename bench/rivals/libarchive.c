@@ -12,6 +12,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#define SAMPLES_EXTRACT 11
+static int compare(const void *x, const void *y);
 
 struct tree {
     const char *name;
@@ -107,6 +112,38 @@ static void write_archive(const struct tree *t, enum kind k) {
     archive_write_free(a);
 }
 
+/* Extraction of the tar into a fresh directory with bsdtar's guards on;
+ * each unit timed alone, the directory removed after, untimed. */
+static void extract_row(const struct tree *t, const char *dir, const char *bytes, size_t len) {
+    double s[SAMPLES_EXTRACT];
+    char place[1024], cmd[1100];
+    snprintf(place, sizeof place, "%s/extract-tmp", dir);
+    snprintf(cmd, sizeof cmd, "rm -rf '%s'", place);
+    char cwd[1024];
+    if (!getcwd(cwd, sizeof cwd)) exit(1);
+    for (int i = -2; i < SAMPLES_EXTRACT; i++) {
+        mkdir(place, 0755);
+        if (chdir(place) != 0) exit(1);
+        uint64_t start = now();
+        struct archive *a = archive_read_new();
+        archive_read_support_format_all(a);
+        archive_read_open_memory(a, bytes, len);
+        struct archive_entry *e;
+        int flags = ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM | ARCHIVE_EXTRACT_SECURE_SYMLINKS | ARCHIVE_EXTRACT_SECURE_NODOTDOT | ARCHIVE_EXTRACT_SECURE_NOABSOLUTEPATHS;
+        while (archive_read_next_header(a, &e) == ARCHIVE_OK) {
+            if (archive_read_extract(a, e, flags) != ARCHIVE_OK) { fprintf(stderr, "%s\n", archive_error_string(a)); exit(1); }
+        }
+        archive_read_free(a);
+        uint64_t took = now() - start;
+        if (chdir(cwd) != 0) exit(1);
+        if (system(cmd) != 0) exit(1);
+        if (i >= 0) s[i] = (double)took;
+    }
+    qsort(s, SAMPLES_EXTRACT, sizeof s[0], compare);
+    printf("extract/tar/%s %.0f\n", t->name, s[SAMPLES_EXTRACT / 2]);
+    fflush(stdout);
+}
+
 static int compare(const void *x, const void *y) {
     double a = *(const double *)x, b = *(const double *)y;
     return a < b ? -1 : a > b;
@@ -160,6 +197,7 @@ int main(int argc, char **argv) {
         size_t slen7;
         char *sz = slurp(path, &slen7);
         row("7z/read-deflate", &t, do_read, sz, slen7, 0);
+        extract_row(&t, dir, tar, len);
     }
     return 0;
 }

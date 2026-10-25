@@ -17,7 +17,7 @@ block() {
 {
   cat <<'ZIG'
 //! Archives other tools wrote, embedded for the interop tests, each with
-//! the manifest libarchive 3.8.10 reads from it (testdata/tools/manifest.c),
+//! the manifest libarchive 3.8.9 reads from it (testdata/tools/manifest.c),
 //! or, where hold reads it otherwise on purpose, the manifest hold reads
 //! and why (`.hold`). testdata/README.md says where each came from.
 //! Written by index.sh.

@@ -1,7 +1,7 @@
 # The interop corpus
 
 Archives the rivals' own tools wrote, read by `src/testing/interop_test.zig`.
-Each `<archive>.manifest` is what libarchive 3.8.10 reads from it, written by
+Each `<archive>.manifest` is what libarchive 3.8.9 reads from it, written by
 `tools/manifest.c`: a line per entry, `<kind> <size> <mode> <mtime> <FNV-1a 64
 of the contents> <name>\t<link>`. hold must read the same lines. Where hold
 reads an archive otherwise on purpose, `<archive>.hold` holds hold's lines and,
@@ -19,7 +19,7 @@ in its `# ` lines, why.
 
 - `zip/`: one tree zipped by Info-ZIP Zip 3.0 (`infozip-*`: DEFLATE, stored,
   forced ZIP64, standard input with a data descriptor), bsdtar 3.7.4 and
-  3.8.10 (`bsdtar38-*`: zstd, bzip2, LZMA, xz), Python 3.13 `zipfile`, Go
+  3.8.9 (`bsdtar38-*`: zstd, bzip2, LZMA, xz), Python 3.13 `zipfile`, Go
   1.27.1 `archive/zip` (data descriptors, a comment) and 7-Zip 26.04
   (DEFLATE, Deflate64, bzip2, AES-128, AES-192, AES-256, ZipCrypto; password
   `hold`). Manifests read with `TZ=UTC`.

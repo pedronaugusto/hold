@@ -20,7 +20,8 @@ const provenance = @import("preflight_bench_options");
 const Error = std.mem.Allocator.Error || Io.Writer.Error || Io.Reader.Error || hold.tar.Reader.NextError ||
     hold.tar.Writer.BeginError || hold.tar.Writer.EndError || hold.tar.Writer.ContentsError || hold.tar.Writer.FinishError ||
     hold.zip.Archive.OpenError || hold.zip.Archive.ContentsError || hold.zip.Writer.BeginError || hold.zip.Writer.EndError ||
-    hold.sevenz.Archive.OpenError || hold.sevenz.Archive.ContentsError || error{ WrongLength, EntryOpen };
+    hold.sevenz.Archive.OpenError || hold.sevenz.Archive.ContentsError || hold.Extract.Error ||
+    Io.Dir.CreateDirPathOpenError || Io.Dir.DeleteTreeError || error{ WrongLength, EntryOpen };
 
 /// One tree: its files' names and contents, in order.
 const Tree = struct {
@@ -122,6 +123,29 @@ const Session = struct {
         try s.measure("zip/write-deflate/{s}", t, zip_bytes, .zip_write_deflate);
         try s.measure("zip/write-store/{s}", t, store_bytes, .zip_write_store);
         if (try s.archive("-deflate.7z", t)) |b| try s.measure("7z/read-deflate/{s}", t, b, .sevenz_read);
+        try s.extractRow(t, tar_bytes);
+    }
+
+    /// Extraction of the tar into a fresh directory each unit, at
+    /// `.none` as libarchive's defaults; the directory is removed after
+    /// each, untimed.
+    fn extractRow(s: *Session, t: *const Tree, bytes: []const u8) !void {
+        const ctx = try s.arena.create(Context);
+        const place = try s.arena.print("{s}/extract-tmp", .{s.corpus orelse "."});
+        ctx.* = .{ .gpa = s.gpa, .tree = t, .archive = bytes, .op = .extract, .io = s.io, .place = place };
+        const row: shakedown.bench.Row(Context, Error) = .{
+            .name = try s.arena.print("extract/tar/{s}", .{t.name}),
+            .unit = "archive",
+            .grow = false,
+            .run = Context.run,
+            .settle = Context.settle,
+            .fixture = .{ .lifetime = .row, .setup = Context.setup, .teardown = Context.teardown },
+        };
+        try shakedown.bench.run(Error, s.gpa, s.io, s.out, ctx, &.{row}, .{
+            .commit = provenance.commit,
+            .cpu = provenance.cpu,
+            .os = provenance.os,
+        }, s.options);
     }
 
     fn measure(s: *Session, comptime name: []const u8, t: *const Tree, bytes: []const u8, op: Op) !void {
@@ -141,7 +165,7 @@ const Session = struct {
     }
 };
 
-const Op = enum { tar_read, tar_write, zip_read, zip_write_deflate, zip_write_store, sevenz_read };
+const Op = enum { tar_read, tar_write, zip_read, zip_write_deflate, zip_write_store, sevenz_read, extract };
 
 /// One row: its tree, the archive it reads, and an output buffer the
 /// writing rows fill again each unit.
@@ -152,6 +176,9 @@ const Context = struct {
     op: Op,
     out: []u8 = &.{},
     scratch: []u8 = &.{},
+    /// Extraction: where each unit's directory goes.
+    io: Io = undefined,
+    place: []const u8 = "",
 
     fn setup(c: *Context) Error!void {
         c.out = try c.gpa.alloc(u8, c.tree.total + c.tree.total / 4 + (1 << 20));
@@ -171,7 +198,23 @@ const Context = struct {
             .zip_write_deflate => _ = try zipInto(c.gpa, c.out, c.tree, .deflate),
             .zip_write_store => _ = try zipInto(c.gpa, c.out, c.tree, .stored),
             .sevenz_read => try c.sevenzRead(),
+            .extract => try c.extract(),
         };
+    }
+
+    fn extract(c: *Context) Error!void {
+        var dir = try Io.Dir.cwd().createDirPathOpen(c.io, c.place, .{});
+        defer dir.close(c.io);
+        var in: Io.Reader = .fixed(c.archive);
+        var tr: hold.tar.Reader = .init(c.gpa, &in, &.{}, .{});
+        defer tr.deinit();
+        const summary = try hold.extract(c.io, c.gpa, dir, .{ .tar = &tr }, .{});
+        if (summary.bytes != c.tree.total) return error.WrongLength;
+    }
+
+    fn settle(c: *Context, units: u64) Error!void {
+        _ = units;
+        try Io.Dir.cwd().deleteTree(c.io, c.place);
     }
 
     /// Every entry's contents read, as an extraction reads them.

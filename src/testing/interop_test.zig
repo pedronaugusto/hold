@@ -1,5 +1,5 @@
 //! Interop: every archive the rivals' own tools wrote reads to the entries
-//! and bytes libarchive 3.8.10 reads from it, line for line of its
+//! and bytes libarchive 3.8.9 reads from it, line for line of its
 //! manifest; an archive libarchive refuses, hold refuses after the same
 //! entries.
 const std = @import("std");

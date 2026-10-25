@@ -1,7 +1,7 @@
 #!/bin/sh
 # The rivals read what hold writes: run by hand from the repository's root
 # after `bay interop-write` has built the writer. For each dialect, the
-# manifest libarchive 3.8.10 reads must be the one hold wrote, and GNU tar,
+# manifest libarchive 3.8.9 reads must be the one hold wrote, and GNU tar,
 # Python's tarfile, Go's archive/tar and 7-Zip must list and extract it.
 set -eu
 # Manifests compared with names in NFC: libarchive's macOS build gives NFD.

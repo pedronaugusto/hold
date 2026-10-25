@@ -150,9 +150,6 @@ const Publish = struct {
     batch: airlock.Batch,
     used: u32 = 0,
     pending_count: u32 = 0,
-    /// Parents of this batch's pendings, open until it commits: a pending
-    /// is renamed through the directory it was created in.
-    held: std.ArrayList(Io.Dir) = .empty,
     /// The last directory added, so a run of entries in one adds it once.
     last_dir: ?[]const u8 = null,
 };
@@ -172,8 +169,13 @@ const Extraction = struct {
     symlinks: std.ArrayList(Deferred) = .empty,
     hardlinks: std.ArrayList(Deferred) = .empty,
     dirs: std.ArrayList(DirFix) = .empty,
-    /// The last parent opened, kept for the next entry in it.
-    cached: ?struct { path: []u8, dir: Io.Dir, held: bool } = null,
+    /// The directories opened, by path, kept until the extraction ends or
+    /// `max_open` are: the entries that follow in one need it again, and a
+    /// batch's pendings are renamed through the directories they were
+    /// created in.
+    opened: std.StringHashMapUnmanaged(Io.Dir) = .empty,
+
+    const max_open = 64;
 
     const Deferred = struct { path: []const u8, target: []const u8, entry: u64 };
     const DirFix = struct { path: []const u8, mode: ?u32, mtime: ?Io.Timestamp, entry: u64 };
@@ -183,11 +185,8 @@ const Extraction = struct {
         // After a failure: the batch's pendings are discarded.
         x.publish.batch.reset(x.io);
         x.release();
-        x.publish.held.deinit(x.gpa);
-        if (x.cached) |c| {
-            c.dir.close(x.io);
-            x.gpa.free(c.path);
-        }
+        x.closeOpened();
+        x.opened.deinit(x.gpa);
         x.written.deinit(x.gpa);
         x.symlinks.deinit(x.gpa);
         x.hardlinks.deinit(x.gpa);
@@ -220,8 +219,7 @@ const Extraction = struct {
         };
         switch (e.kind) {
             .directory => {
-                var d = try x.makeDirs(path);
-                d.close(x.io);
+                _ = try x.dirOf(path, true);
                 try x.dirs.append(x.gpa, .{ .path = try x.dupe(path), .mode = e.mode, .mtime = e.mtime, .entry = x.walk.index });
                 x.summary.directories += 1;
             },
@@ -248,9 +246,10 @@ const Extraction = struct {
     /// when its batch commits, so a name that was a link is replaced,
     /// never followed.
     fn file(x: *Extraction, path: []const u8, e: Entry, contents: *Io.Reader) Error!void {
-        try x.room();
         const split = splitPath(path);
-        const parent = try x.parentOf(split.dir);
+        const parent = try x.dirOf(split.dir, true);
+        // After the parent: the directories made for it take slots too.
+        try x.room();
         const p = x.publish;
         // The batch borrows the name until it commits.
         const base = try x.dupe(split.base);
@@ -279,7 +278,6 @@ const Extraction = struct {
         in_batch = true;
         p.pending_count += 1;
         x.added(x.walk.index);
-        x.cached.?.held = true;
         try x.written.put(x.gpa, try x.dupe(path), {});
         x.summary.files += 1;
     }
@@ -323,12 +321,9 @@ const Extraction = struct {
         };
     }
 
-    /// Closes the parents the batch held and empties it.
+    /// Empties the batch.
     fn release(x: *Extraction) void {
         const p = x.publish;
-        for (p.held.items) |d| d.close(x.io);
-        p.held.clearRetainingCapacity();
-        if (x.cached) |*c| c.held = false;
         p.used = 0;
         p.pending_count = 0;
         p.last_dir = null;
@@ -359,7 +354,7 @@ const Extraction = struct {
                 return error.UnsafeLink;
             };
             const split = splitPath(l.path);
-            const parent = try x.parentOf(split.dir);
+            const parent = try x.dirOf(split.dir, true);
             // Made durable with the batch, through its directory.
             _ = try airlock.symLink(x.io, parent, l.target, split.base, .{ .sync = .{ .level = .none } });
             try x.touch(split.dir, l.entry);
@@ -371,10 +366,11 @@ const Extraction = struct {
                 return error.UnsafeLink;
             }
             const from = splitPath(l.target);
-            var from_dir = try x.openDirs(from.dir, false);
-            defer from_dir.close(x.io);
             const to = splitPath(l.path);
-            const to_dir = try x.parentOf(to.dir);
+            // Room for both, so opening the second never closes the first.
+            try x.reserve(depth(from.dir) + depth(to.dir));
+            const from_dir = try x.dirOf(from.dir, false);
+            const to_dir = try x.dirOf(to.dir, true);
             to_dir.deleteFile(x.io, to.base) catch |err| switch (err) {
                 error.FileNotFound => {},
                 else => |other| return other,
@@ -394,7 +390,7 @@ const Extraction = struct {
             i -= 1;
             const d = x.dirs.items[i];
             const split = splitPath(d.path);
-            const parent = try x.parentOf(split.dir);
+            const parent = try x.dirOf(split.dir, true);
             if (builtin.os.tag != .windows) try parent.setFilePermissions(x.io, split.base, permissions(x.dirMode(d.mode)), .{ .follow_symlinks = false });
             if (x.options.times) if (d.mtime) |t| {
                 try parent.setTimestamps(x.io, split.base, .{ .follow_symlinks = false, .modify_timestamp = .{ .new = t } });
@@ -403,67 +399,70 @@ const Extraction = struct {
         }
     }
 
-    /// The directory `path` names, made where missing; the last one is
-    /// kept open for the entries that follow in it.
-    fn parentOf(x: *Extraction, path: []const u8) Error!Io.Dir {
-        if (x.cached) |c| {
-            if (std.mem.eql(u8, c.path, path)) return c.dir;
-            // A parent of a pending stays open until its batch commits.
-            if (c.held) try x.publish.held.append(x.gpa, c.dir) else c.dir.close(x.io);
-            x.gpa.free(c.path);
-            x.cached = null;
+    /// The directory `path` names, made where `create` and missing,
+    /// opened a component at a time from its nearest opened ancestor and
+    /// never through a link: a component that is a link, or a file, is
+    /// `error.ThroughLink`. Every directory opened stays in `opened`.
+    fn dirOf(x: *Extraction, path: []const u8, create: bool) Error!Io.Dir {
+        if (path.len == 0) return x.root;
+        if (x.opened.get(path)) |d| return d;
+        try x.reserve(depth(path));
+        // The nearest ancestor already open.
+        var d = x.root;
+        var pos: usize = 0;
+        var end = path.len;
+        while (std.mem.findScalarLast(u8, path[0..end], '/')) |slash| : (end = slash) {
+            if (x.opened.get(path[0..slash])) |a| {
+                d = a;
+                pos = slash + 1;
+                break;
+            }
         }
-        const d = try x.makeDirs(path);
-        errdefer d.close(x.io);
-        x.cached = .{ .path = try x.gpa.dupe(u8, path), .dir = d, .held = false };
-        return d;
-    }
-
-    fn makeDirs(x: *Extraction, path: []const u8) Error!Io.Dir {
-        return x.openDirs(path, true);
-    }
-
-    /// Opens `path` a component at a time, never following a link: a
-    /// component that is a link, or a file, is `error.ThroughLink`.
-    fn openDirs(x: *Extraction, path: []const u8, create: bool) Error!Io.Dir {
-        var d = try x.root.openDir(x.io, ".", .{});
-        if (path.len == 0) return d;
-        var it = std.mem.splitScalar(u8, path, '/');
+        var it = std.mem.splitScalar(u8, path[pos..], '/');
         while (it.next()) |part| {
-            const at = it.index orelse path.len + 1;
             const next = d.openDir(x.io, part, .{ .follow_symlinks = false }) catch |err| switch (err) {
                 error.FileNotFound => blk: {
-                    if (!create) {
-                        d.close(x.io);
-                        return err;
-                    }
+                    if (!create) return err;
                     d.createDir(x.io, part, permissions(0o755)) catch |c| switch (c) {
                         error.PathAlreadyExists => {},
-                        else => |other| {
-                            d.close(x.io);
-                            return other;
-                        },
+                        else => |other| return other,
                     };
                     // The directory it was made in gained a name.
-                    const start = at - 1 - part.len;
-                    x.touch(if (start == 0) "" else path[0 .. start - 1], x.walk.index) catch |t| {
-                        d.close(x.io);
-                        return t;
-                    };
-                    break :blk d.openDir(x.io, part, .{ .follow_symlinks = false }) catch |again| {
-                        d.close(x.io);
-                        return through(again);
-                    };
+                    try x.touch(if (pos == 0) "" else path[0 .. pos - 1], x.walk.index);
+                    break :blk d.openDir(x.io, part, .{ .follow_symlinks = false }) catch |again| return through(again);
                 },
-                else => |other| {
-                    d.close(x.io);
-                    return through(other);
-                },
+                else => |other| return through(other),
             };
-            d.close(x.io);
+            errdefer next.close(x.io);
+            const key = try x.gpa.dupe(u8, path[0 .. pos + part.len]);
+            errdefer x.gpa.free(key);
+            try x.opened.put(x.gpa, key, next);
             d = next;
+            pos += part.len + 1;
         }
         return d;
+    }
+
+    /// Room in `opened` for `n` more directories: when there is none,
+    /// every one opened is closed.
+    fn reserve(x: *Extraction, n: usize) Error!void {
+        if (x.opened.count() + n > max_open) try x.forget();
+    }
+
+    /// Closes every directory opened, once the pendings renamed through
+    /// them are published.
+    fn forget(x: *Extraction) Error!void {
+        try x.commit();
+        x.closeOpened();
+    }
+
+    fn closeOpened(x: *Extraction) void {
+        var it = x.opened.iterator();
+        while (it.next()) |kv| {
+            kv.value_ptr.close(x.io);
+            x.gpa.free(kv.key_ptr.*);
+        }
+        x.opened.clearRetainingCapacity();
     }
 };
 
@@ -482,6 +481,11 @@ fn through(err: Io.Dir.OpenError) Error {
         error.SymLinkLoop, error.NotDir => error.ThroughLink,
         else => |other| other,
     };
+}
+
+/// The directories in `path`, itself included.
+fn depth(path: []const u8) usize {
+    return if (path.len == 0) 0 else std.mem.countScalar(u8, path, '/') + 1;
 }
 
 fn splitPath(path: []const u8) struct { dir: []const u8, base: []const u8 } {

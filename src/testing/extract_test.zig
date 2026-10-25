@@ -229,3 +229,36 @@ test "a 7z extracts, its solid folder read once in order" {
     try std.testing.expectEqualStrings("hello\n", try readFile(tmp.dir, "dir/a.txt", &buf));
     try std.testing.expectEqualStrings("hello\n", try readFile(tmp.dir, "link", &buf));
 }
+
+test "more directories than stay open: each still extracts, links across them too" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var items: std.ArrayList(Item) = .empty;
+    defer items.deinit(gpa);
+    var names: std.ArrayList([]u8) = .empty;
+    defer {
+        for (names.items) |n| gpa.free(n);
+        names.deinit(gpa);
+    }
+    // Files round-robin over 100 directories two deep, then hard links
+    // from the last directories to the first.
+    for (0..300) |i| {
+        const n = try gpa.print("a{d}/b/f{d}", .{ i % 100, i });
+        try names.append(gpa, n);
+        try items.append(gpa, .{ .entry = .{ .name = n }, .contents = n });
+    }
+    for (0..20) |i| {
+        const n = try gpa.print("a{d}/b/h{d}", .{ 99 - i, i });
+        try names.append(gpa, n);
+        try items.append(gpa, .{ .entry = .{ .name = n, .kind = .hardlink, .link = names.items[i] } });
+    }
+    const archive = try tarOf(gpa, items.items);
+    defer gpa.free(archive);
+    const s = try extractTar(tmp.dir, archive, .{ .level = .data });
+    try std.testing.expectEqual(@as(u64, 300), s.files);
+    try std.testing.expectEqual(@as(u64, 20), s.links);
+    var buf: [64]u8 = undefined;
+    for (names.items[0..300]) |n| try std.testing.expectEqualStrings(n, try readFile(tmp.dir, n, &buf));
+    try std.testing.expectEqualStrings(names.items[0], try readFile(tmp.dir, names.items[300], &buf));
+}
