@@ -51,6 +51,15 @@ pub fn dev(b: *std.Build, tools: type) void {
     check.dependOn(&example.step);
     b.getInstallStep().dependOn(check);
 
+    // The writer behind testdata/interop.sh, where the rivals' readers
+    // read what hold writes; run by hand.
+    const interop = b.addExecutable(.{
+        .name = "interop-write",
+        .root_module = b.createModule(.{ .root_source_file = p.path("testdata/tools/write.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "hold", .module = module }} }),
+    });
+    b.step("interop-write", "Build the writer testdata/interop.sh checks").dependOn(&b.addInstallArtifact(interop, .{}).step);
+    check.dependOn(&interop.step);
+
     tools.preflight.addCi(b, p, .{
         .tests = test_step,
         .portable_tests = true,

@@ -1,0 +1,10 @@
+directory 0 755 1577934245 cbf29ce484222325 dir	
+file 6 644 1577934245 a9bc80cca21f28b3 dir/a.txt	
+directory 0 755 1577934245 cbf29ce484222325 dir/sub	
+directory 0 755 1577934245 cbf29ce484222325 dir/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx	
+file 5 644 1577934245 b3f5eab6b3d265db dir/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy.txt	
+file 8 644 1577934245 4cb49c4e2e50bc1e dé.txt	
+file 0 644 1577934245 cbf29ce484222325 empty	
+file 6 644 1577934245 a9bc80cca21f28b3 hard	
+symlink 0 755 1577934245 cbf29ce484222325 link	dir/a.txt
+file 17 755 1577934245 bada1b639b05c480 run.sh	

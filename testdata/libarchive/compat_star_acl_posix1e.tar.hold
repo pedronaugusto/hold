@@ -1,0 +1,4 @@
+# libarchive derives the group bits from the ACL mask in star's SCHILY.acl records; hold gives the header's mode.
+file 0 142 1479121596 cbf29ce484222325 file1	
+file 0 573 1479121601 cbf29ce484222325 file2	
+directory 0 142 1479121726 cbf29ce484222325 dir1/	

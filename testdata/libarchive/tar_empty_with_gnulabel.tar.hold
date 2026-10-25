@@ -1,0 +1,2 @@
+# libarchive drops a GNU volume label; hold hands it out as an entry of kind other, which extraction never writes.
+other 0 0 1558166659 cbf29ce484222325 label	

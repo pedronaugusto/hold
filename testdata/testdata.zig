@@ -1,2 +1,55 @@
-//! Archives other tools wrote, embedded for the interop tests. Each is
-//! named for the tool and the command that made it (testdata/README.md).
+//! Archives other tools wrote, embedded for the interop tests, each with
+//! the manifest libarchive 3.8.10 reads from it (testdata/tools/manifest.c),
+//! or, where hold reads it otherwise on purpose, the manifest hold reads
+//! and why (`.hold`). testdata/README.md says where each came from.
+
+pub const Case = struct { name: []const u8, archive: []const u8, manifest: []const u8 };
+
+pub const tar = [_]Case{
+    .{ .name = "libarchive/compat_gtar_1.tar", .archive = @embedFile("libarchive/compat_gtar_1.tar"), .manifest = @embedFile("libarchive/compat_gtar_1.tar.manifest") },
+    .{ .name = "libarchive/compat_gtar_2.tar", .archive = @embedFile("libarchive/compat_gtar_2.tar"), .manifest = @embedFile("libarchive/compat_gtar_2.tar.manifest") },
+    .{ .name = "libarchive/compat_mac-1.tar", .archive = @embedFile("libarchive/compat_mac-1.tar"), .manifest = @embedFile("libarchive/compat_mac-1.tar.manifest") },
+    .{ .name = "libarchive/compat_mac-2.tar", .archive = @embedFile("libarchive/compat_mac-2.tar"), .manifest = @embedFile("libarchive/compat_mac-2.tar.manifest") },
+    .{ .name = "libarchive/compat_perl_archive_tar.tar", .archive = @embedFile("libarchive/compat_perl_archive_tar.tar"), .manifest = @embedFile("libarchive/compat_perl_archive_tar.tar.manifest") },
+    .{ .name = "libarchive/compat_plexus_archiver_tar.tar", .archive = @embedFile("libarchive/compat_plexus_archiver_tar.tar"), .manifest = @embedFile("libarchive/compat_plexus_archiver_tar.tar.manifest") },
+    .{ .name = "libarchive/compat_solaris_tar_acl.tar", .archive = @embedFile("libarchive/compat_solaris_tar_acl.tar"), .manifest = @embedFile("libarchive/compat_solaris_tar_acl.tar.hold") },
+    .{ .name = "libarchive/compat_star_acl_nfs4.tar", .archive = @embedFile("libarchive/compat_star_acl_nfs4.tar"), .manifest = @embedFile("libarchive/compat_star_acl_nfs4.tar.hold") },
+    .{ .name = "libarchive/compat_star_acl_posix1e.tar", .archive = @embedFile("libarchive/compat_star_acl_posix1e.tar"), .manifest = @embedFile("libarchive/compat_star_acl_posix1e.tar.hold") },
+    .{ .name = "libarchive/compat_tar_directory_1.tar", .archive = @embedFile("libarchive/compat_tar_directory_1.tar"), .manifest = @embedFile("libarchive/compat_tar_directory_1.tar.manifest") },
+    .{ .name = "libarchive/compat_tar_hardlink_1.tar", .archive = @embedFile("libarchive/compat_tar_hardlink_1.tar"), .manifest = @embedFile("libarchive/compat_tar_hardlink_1.tar.manifest") },
+    .{ .name = "libarchive/compat_uudecode_large.tar", .archive = @embedFile("libarchive/compat_uudecode_large.tar"), .manifest = @embedFile("libarchive/compat_uudecode_large.tar.manifest") },
+    .{ .name = "libarchive/gtar_filename_koi8r.tar", .archive = @embedFile("libarchive/gtar_filename_koi8r.tar"), .manifest = @embedFile("libarchive/gtar_filename_koi8r.tar.manifest") },
+    .{ .name = "libarchive/gtar_redundant_L.tar", .archive = @embedFile("libarchive/gtar_redundant_L.tar"), .manifest = @embedFile("libarchive/gtar_redundant_L.tar.manifest") },
+    .{ .name = "libarchive/gtar_sparse_1_13.tar", .archive = @embedFile("libarchive/gtar_sparse_1_13.tar"), .manifest = @embedFile("libarchive/gtar_sparse_1_13.tar.manifest") },
+    .{ .name = "libarchive/gtar_sparse_1_17.tar", .archive = @embedFile("libarchive/gtar_sparse_1_17.tar"), .manifest = @embedFile("libarchive/gtar_sparse_1_17.tar.manifest") },
+    .{ .name = "libarchive/gtar_sparse_1_17_posix00.tar", .archive = @embedFile("libarchive/gtar_sparse_1_17_posix00.tar"), .manifest = @embedFile("libarchive/gtar_sparse_1_17_posix00.tar.manifest") },
+    .{ .name = "libarchive/gtar_sparse_1_17_posix01.tar", .archive = @embedFile("libarchive/gtar_sparse_1_17_posix01.tar"), .manifest = @embedFile("libarchive/gtar_sparse_1_17_posix01.tar.manifest") },
+    .{ .name = "libarchive/gtar_sparse_1_17_posix10.tar", .archive = @embedFile("libarchive/gtar_sparse_1_17_posix10.tar"), .manifest = @embedFile("libarchive/gtar_sparse_1_17_posix10.tar.manifest") },
+    .{ .name = "libarchive/gtar_sparse_1_17_posix10_modified.tar", .archive = @embedFile("libarchive/gtar_sparse_1_17_posix10_modified.tar"), .manifest = @embedFile("libarchive/gtar_sparse_1_17_posix10_modified.tar.manifest") },
+    .{ .name = "libarchive/gtar_sparse_length.tar", .archive = @embedFile("libarchive/gtar_sparse_length.tar"), .manifest = @embedFile("libarchive/gtar_sparse_length.tar.manifest") },
+    .{ .name = "libarchive/gtar_sparse_skip_entry.tar", .archive = @embedFile("libarchive/gtar_sparse_skip_entry.tar"), .manifest = @embedFile("libarchive/gtar_sparse_skip_entry.tar.hold") },
+    .{ .name = "libarchive/tar_concatenated.tar", .archive = @embedFile("libarchive/tar_concatenated.tar"), .manifest = @embedFile("libarchive/tar_concatenated.tar.manifest") },
+    .{ .name = "libarchive/tar_empty_filename.tar", .archive = @embedFile("libarchive/tar_empty_filename.tar"), .manifest = @embedFile("libarchive/tar_empty_filename.tar.manifest") },
+    .{ .name = "libarchive/tar_empty_pax.tar", .archive = @embedFile("libarchive/tar_empty_pax.tar"), .manifest = @embedFile("libarchive/tar_empty_pax.tar.manifest") },
+    .{ .name = "libarchive/tar_empty_with_gnulabel.tar", .archive = @embedFile("libarchive/tar_empty_with_gnulabel.tar"), .manifest = @embedFile("libarchive/tar_empty_with_gnulabel.tar.hold") },
+    .{ .name = "libarchive/tar_filename_koi8r.tar", .archive = @embedFile("libarchive/tar_filename_koi8r.tar"), .manifest = @embedFile("libarchive/tar_filename_koi8r.tar.manifest") },
+    .{ .name = "libarchive/tar_invalid_pax_size.tar", .archive = @embedFile("libarchive/tar_invalid_pax_size.tar"), .manifest = @embedFile("libarchive/tar_invalid_pax_size.tar.manifest") },
+    .{ .name = "libarchive/tar_mac_metadata_1.tar", .archive = @embedFile("libarchive/tar_mac_metadata_1.tar"), .manifest = @embedFile("libarchive/tar_mac_metadata_1.tar.manifest") },
+    .{ .name = "libarchive/tar_pax_g_large.tar", .archive = @embedFile("libarchive/tar_pax_g_large.tar"), .manifest = @embedFile("libarchive/tar_pax_g_large.tar.manifest") },
+    .{ .name = "libarchive/tar_pax_negative_time.tar", .archive = @embedFile("libarchive/tar_pax_negative_time.tar"), .manifest = @embedFile("libarchive/tar_pax_negative_time.tar.manifest") },
+    .{ .name = "libarchive/ustar_filename_koi8r.tar", .archive = @embedFile("libarchive/ustar_filename_koi8r.tar"), .manifest = @embedFile("libarchive/ustar_filename_koi8r.tar.manifest") },
+    .{ .name = "tar/7zz.tar", .archive = @embedFile("tar/7zz.tar"), .manifest = @embedFile("tar/7zz.tar.manifest") },
+    .{ .name = "tar/bsdtar-gnutar.tar", .archive = @embedFile("tar/bsdtar-gnutar.tar"), .manifest = @embedFile("tar/bsdtar-gnutar.tar.manifest") },
+    .{ .name = "tar/bsdtar-pax.tar", .archive = @embedFile("tar/bsdtar-pax.tar"), .manifest = @embedFile("tar/bsdtar-pax.tar.manifest") },
+    .{ .name = "tar/bsdtar-ustar.tar", .archive = @embedFile("tar/bsdtar-ustar.tar"), .manifest = @embedFile("tar/bsdtar-ustar.tar.manifest") },
+    .{ .name = "tar/bsdtar-v7tar.tar", .archive = @embedFile("tar/bsdtar-v7tar.tar"), .manifest = @embedFile("tar/bsdtar-v7tar.tar.manifest") },
+    .{ .name = "tar/go-pax.tar", .archive = @embedFile("tar/go-pax.tar"), .manifest = @embedFile("tar/go-pax.tar.manifest") },
+    .{ .name = "tar/gtar-gnu.tar", .archive = @embedFile("tar/gtar-gnu.tar"), .manifest = @embedFile("tar/gtar-gnu.tar.manifest") },
+    .{ .name = "tar/gtar-oldgnu.tar", .archive = @embedFile("tar/gtar-oldgnu.tar"), .manifest = @embedFile("tar/gtar-oldgnu.tar.manifest") },
+    .{ .name = "tar/gtar-pax.tar", .archive = @embedFile("tar/gtar-pax.tar"), .manifest = @embedFile("tar/gtar-pax.tar.manifest") },
+    .{ .name = "tar/gtar-posix.tar", .archive = @embedFile("tar/gtar-posix.tar"), .manifest = @embedFile("tar/gtar-posix.tar.manifest") },
+    .{ .name = "tar/gtar-ustar.tar", .archive = @embedFile("tar/gtar-ustar.tar"), .manifest = @embedFile("tar/gtar-ustar.tar.manifest") },
+    .{ .name = "tar/gtar-v7.tar", .archive = @embedFile("tar/gtar-v7.tar"), .manifest = @embedFile("tar/gtar-v7.tar.manifest") },
+    .{ .name = "tar/python-gnu.tar", .archive = @embedFile("tar/python-gnu.tar"), .manifest = @embedFile("tar/python-gnu.tar.manifest") },
+    .{ .name = "tar/python-pax.tar", .archive = @embedFile("tar/python-pax.tar"), .manifest = @embedFile("tar/python-pax.tar.manifest") },
+};

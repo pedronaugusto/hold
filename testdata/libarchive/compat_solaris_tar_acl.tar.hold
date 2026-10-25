@@ -1,0 +1,5 @@
+# libarchive derives the permission bits from the ACL it reads; hold reads no ACLs and gives the header's mode.
+file 0 644 1240664175 cbf29ce484222325 file-with-posix-acls	
+directory 0 750 1484428460 cbf29ce484222325 dir-with-posix-acls/	
+file 0 640 1484429217 cbf29ce484222325 file-with-nfsv4-acls	
+directory 0 750 1484429277 cbf29ce484222325 dir-with-nfsv4-acls/	

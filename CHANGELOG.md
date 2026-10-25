@@ -10,5 +10,8 @@ follow [Semantic Versioning](https://semver.org/).
 
 - tar: `tar.Reader` reads v7, ustar, pax, GNU and sparse archives forward
   from any `std.Io.Reader`; `tar.Writer` writes ustar, pax and GNU.
+- Interop: the tar archives of GNU tar, bsdtar, Python, Go, 7-Zip and
+  libarchive's own test suite read to the entries and bytes libarchive
+  reads; GNU tar, libarchive, Python, Go and 7-Zip read what hold writes.
 
 [Unreleased]: https://github.com/pedronaugusto/hold/commits/main

@@ -57,6 +57,10 @@ sparse: std.ArrayList(Segment) = .empty,
 /// Private: the current entry's typeflag and format.
 flag: u8 = 0,
 format: Format = .ustar,
+/// Private: a pax header was read, so a hard link's size is its data's
+/// (POSIX.1-2001); before pax, writers put a size on hard links with no
+/// data after them, and readers ignore it.
+pax_seen: bool = false,
 /// Private: the bytes of a pax 1.0 sparse map read at the data's start.
 map_used: u64 = 0,
 /// Private: the contents' reader and where it is.
@@ -113,13 +117,10 @@ pub fn next(r: *Reader) NextError!?Entry {
             return null;
         }
         if (header.isZero(&r.block)) {
-            // The trailer is two zero blocks; an archive that ends after
-            // one is taken as ended, as every reader takes it.
-            var second: header.Block = undefined;
-            if (try r.readBlock(&second, false)) {
-                if (!header.isZero(&second)) return r.fail(at, .trailer, error.Invalid);
-            }
-            if (saw_extension) return r.fail(at, .trailer, error.Invalid);
+            // The trailer is two zero blocks, but the first ends the
+            // archive: what follows it is padding, often a tape's old
+            // bytes, and libarchive reads no further either. An extended
+            // header with no entry after it describes nothing.
             r.done = true;
             return null;
         }
@@ -127,9 +128,16 @@ pub fn next(r: *Reader) NextError!?Entry {
         const flag = r.block[header.typeflag];
         const size = header.unsigned(header.size.of(&r.block)) catch return r.fail(at, .header_field, error.Invalid);
         switch (flag) {
+            'A' => {
+                // A Solaris ACL for the next entry: ACLs are not read, so
+                // its data is passed over as the extension it is.
+                try r.skipData(size, at);
+                saw_extension = true;
+            },
             'x', 'X' => {
                 try r.readData(&r.local, size, at);
                 try r.checkRecords(r.local.items, at);
+                r.pax_seen = true;
                 saw_extension = true;
             },
             'g' => {
@@ -138,6 +146,7 @@ pub fn next(r: *Reader) NextError!?Entry {
                 try r.readData(&data, size, at);
                 try r.checkRecords(data.items, at);
                 try r.mergeGlobal(data.items);
+                r.pax_seen = true;
                 saw_extension = true;
             },
             'L' => {
@@ -247,6 +256,13 @@ fn readData(r: *Reader, list: *std.ArrayList(u8), size: u64, at: u64) NextError!
         error.ReadFailed => return error.ReadFailed,
     };
     r.offset += size;
+    try r.skipInput(padding(size));
+}
+
+/// An extension's data passed over unread, after its bound is checked.
+fn skipData(r: *Reader, size: u64, at: u64) NextError!void {
+    if (Limits.over(r.options.limits.header, size)) return r.fail(at, .header_limit, error.LimitExceeded);
+    try r.skipInput(size);
     try r.skipInput(padding(size));
 }
 
@@ -425,19 +441,23 @@ fn entry(r: *Reader, at: u64, flag: u8, header_size: u64) NextError!Entry {
         sparse = true;
     }
 
-    // What the entry's contents are: no data for these, whatever the size
-    // field says, but its bytes are still passed over.
+    // Which entries carry data after their header. A directory, a link or
+    // a device carries none whatever its size field says, as libarchive
+    // and Go read them (some writers put a size there); a GNU dump
+    // directory and a multi-volume continuation carry data no one reads,
+    // which is passed over.
     const has_data = switch (e.kind) {
-        .file, .hardlink => true,
+        .file => true,
+        .hardlink => r.pax_seen,
         else => false,
     };
+    const stored = has_data or flag == 'D' or flag == 'M';
     const c = &r.reader;
     c.* = .{ .interface = c.interface, .input = r.input, .owner = r };
     c.interface.seek = 0;
     c.interface.end = 0;
-    c.data_left = data_size;
-    c.padding = padding(data_size);
-    // A directory's or a device's data, if any, is passed over by `next`.
+    c.data_left = if (stored) data_size else 0;
+    c.padding = if (stored) padding(data_size) else 0;
     c.logical_left = if (has_data) logical else 0;
     if (sparse) {
         try r.checkSparse(at, logical);
@@ -553,8 +573,12 @@ fn sparseMapInData(r: *Reader, at: u64, data_size: u64) NextError!void {
     r.map_used = used;
 }
 
+/// A number of the map, on a line of its own. Lines starting with `#`
+/// before it are comments (`#!gnu-sparse-format`, `#format:1.0`), as
+/// libarchive reads them.
 fn mapLine(r: *Reader, line: *[24]u8, used: *u64, at: u64, data_size: u64) NextError!u64 {
     var n: usize = 0;
+    var comment = false;
     while (true) {
         if (used.* >= data_size or n == line.len) return r.fail(at, .sparse_map, error.Invalid);
         const c = r.input.takeByte() catch |e| switch (e) {
@@ -563,15 +587,22 @@ fn mapLine(r: *Reader, line: *[24]u8, used: *u64, at: u64, data_size: u64) NextE
         };
         r.offset += 1;
         used.* += 1;
-        if (c == '\n') break;
-        line[n] = c;
-        n += 1;
+        if (n == 0 and !comment and c == '#') {
+            comment = true;
+        } else if (comment) {
+            if (c == '\n') comment = false;
+        } else if (c == '\n') {
+            break;
+        } else {
+            line[n] = c;
+            n += 1;
+        }
     }
     return std.fmt.parseUnsigned(u64, line[0..n], 10) catch r.fail(at, .sparse_map, error.Invalid);
 }
 
-/// Runs in order, apart, inside the file, and holding exactly the data
-/// the archive stores.
+/// Runs in order, apart, inside the file, and within the data the archive
+/// stores.
 fn checkSparse(r: *Reader, at: u64, logical: u64) NextError!void {
     const c = &r.reader;
     c.data_left -= r.map_used;
@@ -585,7 +616,8 @@ fn checkSparse(r: *Reader, at: u64, logical: u64) NextError!void {
         if (end > logical) return r.fail(at, .sparse_map, error.Invalid);
         stored += s.len;
     }
-    if (stored != c.data_left) return r.fail(at, .sparse_map, error.Invalid);
+    // Bytes past the last run are passed over, as libarchive passes them.
+    if (stored > c.data_left) return r.fail(at, .sparse_map, error.Invalid);
 }
 
 //=========================================================================

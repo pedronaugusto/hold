@@ -8,4 +8,5 @@ test {
     _ = @import("tar/Writer.zig");
     _ = @import("testing/tar_test.zig");
     _ = @import("testing/fuzz_test.zig");
+    _ = @import("testing/interop_test.zig");
 }

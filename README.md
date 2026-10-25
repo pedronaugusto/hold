@@ -69,7 +69,10 @@ by [preflight](https://github.com/pedronaugusto/preflight).
 
 `bay test` runs the suite, the fuzz targets over their corpora and the
 example. `bay parsers --fuzz` fuzzes every parser. The interop corpus under
-`testdata/` was written by the rivals' own tools (testdata/README.md).
+`testdata/` was written by the rivals' own tools, and every archive in it must
+read to the entries and bytes libarchive reads (testdata/README.md);
+`testdata/interop.sh` has GNU tar, libarchive, Python, Go and 7-Zip read what
+hold writes.
 
 ## Licence
 
