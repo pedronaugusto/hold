@@ -1,0 +1,164 @@
+//! Extraction, and the hostile-input rules (design §3) each with a test,
+//! the published shapes among them.
+const std = @import("std");
+const hold = @import("../hold.zig");
+
+const Item = struct { entry: hold.Entry, contents: []const u8 = "" };
+
+fn tarOf(gpa: std.mem.Allocator, items: []const Item) ![]u8 {
+    var out: std.Io.Writer.Allocating = .init(gpa);
+    errdefer out.deinit();
+    var tw: hold.tar.Writer = .init(&out.writer, &.{}, .{});
+    for (items) |it| try tw.add(.{ .entry = it.entry }, it.contents);
+    try tw.finish();
+    return out.toOwnedSlice();
+}
+
+fn extractTar(dir: std.Io.Dir, archive: []const u8, options: hold.Extract.Options) hold.Extract.Error!hold.Extract.Summary {
+    var in: std.Io.Reader = .fixed(archive);
+    var tr: hold.tar.Reader = .init(std.testing.allocator, &in, &.{}, .{});
+    defer tr.deinit();
+    return hold.extract(std.testing.io, std.testing.allocator, dir, .{ .tar = &tr }, options);
+}
+
+fn readFile(dir: std.Io.Dir, path: []const u8, buf: []u8) ![]u8 {
+    return dir.readFile(std.testing.io, path, buf);
+}
+
+test "a tree extracts: files, directories, links, times and modes" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const t = hold.Entry.seconds(1_600_000_000);
+    const archive = try tarOf(gpa, &.{
+        .{ .entry = .{ .name = "d/", .kind = .directory, .mode = 0o755, .mtime = t } },
+        .{ .entry = .{ .name = "d/a.txt", .mode = 0o644, .mtime = t }, .contents = "hello\n" },
+        .{ .entry = .{ .name = "d/run", .mode = 0o4777, .mtime = t }, .contents = "#!/bin/sh\n" },
+        .{ .entry = .{ .name = "d/link", .kind = .symlink, .link = "a.txt", .mtime = t } },
+        .{ .entry = .{ .name = "hard", .kind = .hardlink, .link = "d/a.txt" } },
+        .{ .entry = .{ .name = "./", .kind = .directory } },
+    });
+    defer gpa.free(archive);
+    const summary = try extractTar(tmp.dir, archive, .{});
+    try std.testing.expectEqual(@as(u64, 2), summary.files);
+    try std.testing.expectEqual(@as(u64, 2), summary.links);
+    var buf: [64]u8 = undefined;
+    try std.testing.expectEqualStrings("hello\n", try readFile(tmp.dir, "d/a.txt", &buf));
+    try std.testing.expectEqualStrings("hello\n", try readFile(tmp.dir, "d/link", &buf));
+    try std.testing.expectEqualStrings("hello\n", try readFile(tmp.dir, "hard", &buf));
+    const st = try tmp.dir.statFile(std.testing.io, "d/a.txt", .{});
+    try std.testing.expectEqual(t.nanoseconds, st.mtime.nanoseconds);
+    if (@import("builtin").os.tag != .windows) {
+        // The set-user-ID bit and others' write are dropped.
+        const run = try tmp.dir.statFile(std.testing.io, "d/run", .{});
+        try std.testing.expectEqual(@as(u32, 0o755), @as(u32, @intCast(run.permissions.toMode() & 0o7777)));
+    }
+}
+
+test "Zip Slip: a name with .. is refused, nothing written outside" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDirPath(std.testing.io, "dest");
+    const dest = try tmp.dir.openDir(std.testing.io, "dest", .{});
+    defer dest.close(std.testing.io);
+    for ([_][]const u8{ "../evil", "a/../../evil", "/tmp/evil", "a\\..\\..\\evil", "C:evil" }) |bad| {
+        const archive = try tarOf(gpa, &.{.{ .entry = .{ .name = bad }, .contents = "x" }});
+        defer gpa.free(archive);
+        try std.testing.expectError(error.UnsafeName, extractTar(dest, archive, .{}));
+    }
+    try std.testing.expectError(error.FileNotFound, tmp.dir.statFile(std.testing.io, "evil", .{}));
+}
+
+test "a symbolic link out of the destination is refused, by every route" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    for ([_][2][]const u8{ .{ "l", "/etc" }, .{ "l", "../x" }, .{ "a/l", "../../x" }, .{ "l2", "sub/l/.." } }) |bad| {
+        const archive = try tarOf(gpa, &.{.{ .entry = .{ .name = bad[0], .kind = .symlink, .link = bad[1] } }});
+        defer gpa.free(archive);
+        try std.testing.expectError(error.UnsafeLink, extractTar(tmp.dir, archive, .{}));
+    }
+    // Refused links are made with `.any_unsafe` only.
+    const ok = try tarOf(gpa, &.{.{ .entry = .{ .name = "out", .kind = .symlink, .link = "../x" } }});
+    defer gpa.free(ok);
+    _ = try extractTar(tmp.dir, ok, .{ .links = .any_unsafe });
+}
+
+test "a write through a symbolic link is refused, the archive's or the destination's" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    if (@import("builtin").os.tag == .windows) return error.SkipZigTest;
+    try tmp.dir.createDirPath(std.testing.io, "dest");
+    try tmp.dir.createDirPath(std.testing.io, "outside");
+    const dest = try tmp.dir.openDir(std.testing.io, "dest", .{});
+    defer dest.close(std.testing.io);
+    // The destination already holds a link out (the npm tar CVE-2021-32803
+    // shape): a file under it must not land outside.
+    try dest.symLink(std.testing.io, "../outside", "escape", .{});
+    const archive = try tarOf(gpa, &.{.{ .entry = .{ .name = "escape/f" }, .contents = "x" }});
+    defer gpa.free(archive);
+    try std.testing.expectError(error.ThroughLink, extractTar(dest, archive, .{}));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.statFile(std.testing.io, "outside/f", .{}));
+    // The archive makes a link inside, then writes under it: the link is
+    // made last, so the file lands in a real directory, and the link is
+    // refused where that directory now stands.
+    const second = try tarOf(gpa, &.{
+        .{ .entry = .{ .name = "in", .kind = .symlink, .link = "sub" } },
+        .{ .entry = .{ .name = "in/f" }, .contents = "x" },
+    });
+    defer gpa.free(second);
+    try std.testing.expectError(error.IsDir, extractTar(dest, second, .{}));
+}
+
+test "a hard link to anything this extraction did not write is refused" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    for ([_][]const u8{ "../../etc/passwd", "/etc/passwd", "never-written" }) |target| {
+        const archive = try tarOf(gpa, &.{.{ .entry = .{ .name = "h", .kind = .hardlink, .link = target } }});
+        defer gpa.free(archive);
+        try std.testing.expectError(error.UnsafeLink, extractTar(tmp.dir, archive, .{}));
+    }
+}
+
+test "devices and FIFOs are refused unless skipped" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const archive = try tarOf(gpa, &.{.{ .entry = .{ .name = "null", .kind = .character_device, .device = .{ .major = 1, .minor = 3 } } }});
+    defer gpa.free(archive);
+    try std.testing.expectError(error.Special, extractTar(tmp.dir, archive, .{}));
+    const s = try extractTar(tmp.dir, archive, .{ .specials = .skip });
+    try std.testing.expectEqual(@as(u64, 1), s.skipped);
+}
+
+test "the total bound stops an extraction at its limit" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const archive = try tarOf(gpa, &.{.{ .entry = .{ .name = "big" }, .contents = "0123456789" }});
+    defer gpa.free(archive);
+    try std.testing.expectError(error.LimitExceeded, extractTar(tmp.dir, archive, .{ .total = .fromRaw(5) }));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.statFile(std.testing.io, "big", .{}));
+}
+
+test "a zip extracts through its central directory" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var out: std.Io.Writer.Allocating = .init(gpa);
+    defer out.deinit();
+    var zw: hold.zip.Writer = .init(gpa, &out.writer, .{});
+    defer zw.deinit();
+    try zw.add(.{ .entry = .{ .name = "dir/a.txt", .mtime = hold.Entry.seconds(1_600_000_000) } }, "zipped hello");
+    try zw.add(.{ .entry = .{ .name = "link", .kind = .symlink, .link = "dir/a.txt" } }, "");
+    try zw.finish("");
+    var archive = try hold.zip.Archive.open(gpa, .{ .memory = out.written() }, .{});
+    defer archive.deinit();
+    const s = try hold.extract(std.testing.io, gpa, tmp.dir, .{ .zip = &archive }, .{});
+    try std.testing.expectEqual(@as(u64, 1), s.files);
+    var buf: [64]u8 = undefined;
+    try std.testing.expectEqualStrings("zipped hello", try readFile(tmp.dir, "link", &buf));
+}

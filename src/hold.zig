@@ -11,3 +11,9 @@ pub const Diagnostic = @import("Diagnostic.zig");
 pub const tar = @import("tar.zig");
 /// zip archives.
 pub const zip = @import("zip.zig");
+/// The names extraction writes, and the links it makes.
+pub const name = @import("name.zig");
+/// Extraction into a directory, with the hostile-input rules on.
+pub const extract = @import("extract.zig").extract;
+/// Extraction's options, sources, errors and summary.
+pub const Extract = @import("extract.zig");

@@ -7,6 +7,7 @@ pub const layers: []const gantry.rules.Layer = &.{
         "src/Limits.zig",
         "src/Diagnostic.zig",
         "src/text.zig",
+        "src/name.zig",
     } },
     .{ .name = "streams and codecs", .patterns = &.{
         "src/Bounded.zig",
@@ -35,6 +36,7 @@ pub const layers: []const gantry.rules.Layer = &.{
         "src/tar.zig",
         "src/zip.zig",
     } },
+    .{ .name = "extraction", .patterns = &.{"src/extract.zig"} },
     .{ .name = "public", .patterns = &.{"src/hold.zig"} },
 };
 

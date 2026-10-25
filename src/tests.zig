@@ -17,6 +17,8 @@ test {
     _ = @import("zip/aes.zig");
     _ = @import("testing/tar_test.zig");
     _ = @import("testing/zip_test.zig");
+    _ = @import("name.zig");
+    _ = @import("testing/extract_test.zig");
     _ = @import("testing/fuzz_test.zig");
     _ = @import("testing/interop_test.zig");
 }
