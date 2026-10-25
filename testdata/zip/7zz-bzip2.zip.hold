@@ -1,0 +1,8 @@
+# 7-Zip and Windows writers store the exact NTFS time; libarchive reads the two-second DOS time beside it (and as local time), hold the NTFS time.
+# warp has no decoder for this method yet (bzip2, LZMA, xz: warp-dense; Deflate64: warp-fast, on a branch); hold refuses it by name, entry by entry. The line becomes libarchive's when warp has it.
+directory 0 755 1577934245 cbf29ce484222325 dir/	
+file 6 644 1577934245 a9bc80cca21f28b3 dir/a.txt	
+file 8 644 1577934245 4cb49c4e2e50bc1e dé.txt	
+symlink 0 755 1577934245 cbf29ce484222325 link	dir/a.txt
+file 50000 644 1577934245 df05cc35c44786fc rand.bin	
+error UnsupportedMethod

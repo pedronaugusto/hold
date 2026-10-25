@@ -1,0 +1,3 @@
+symlink 0 777 1615853568 cbf29ce484222325 libxkbcommon-x11.so	libxkbcommon-x11.so.0.0.0
+symlink 0 777 1615853568 cbf29ce484222325 libxkbcommon-x11.so.0	libxkbcommon-x11.so.0.0.0
+file 50280 755 1610384420 35b4dfb597341068 libxkbcommon-x11.so.0.0.0	

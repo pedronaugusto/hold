@@ -1,0 +1,4 @@
+# 7-Zip and Windows writers store the exact NTFS time; libarchive reads the two-second DOS time beside it (and as local time), hold the NTFS time.
+# Traditional PKWARE encryption is refused by name (design §0).
+file 20 664 1379416405 5c88a12f67adb6b0 bar.txt	
+error UnsupportedEncryption

@@ -6,6 +6,7 @@
 #include <archive.h>
 #include <archive_entry.h>
 #include <stdint.h>
+#include <locale.h>
 #include <stdio.h>
 
 static const char *kind(struct archive_entry *e) {
@@ -21,13 +22,27 @@ static const char *kind(struct archive_entry *e) {
     }
 }
 
+/* The name as UTF-8. In a UTF-8 locale libarchive's macOS build rewrites
+ * names to NFD; hold's test compares names under NFC for it. */
+static const char *name(struct archive_entry *e) {
+    const char *n = archive_entry_pathname_utf8(e);
+    return n ? n : archive_entry_pathname(e);
+}
+
 int main(int argc, char **argv) {
+    setlocale(LC_ALL, "en_US.UTF-8");
     struct archive *a = archive_read_new();
     archive_read_support_format_all(a);
     archive_read_support_filter_all(a);
     /* AppleDouble `._` entries stay entries, as every reader but
      * libarchive's macOS build reads them. */
     archive_read_set_options(a, "tar:!mac-ext");
+    archive_read_set_options(a, "zip:!mac-ext");
+    /* The passwords of the corpus's encrypted entries: this corpus's own,
+     * and the ones libarchive's tests use. */
+    archive_read_add_passphrase(a, "hold");
+    archive_read_add_passphrase(a, "password");
+    archive_read_add_passphrase(a, "12345678");
     if (archive_read_open_filename(a, argv[1], 10240) != ARCHIVE_OK) {
         fprintf(stderr, "%s\n", archive_error_string(a));
         return 1;
@@ -39,7 +54,8 @@ int main(int argc, char **argv) {
         const void *buf;
         size_t len;
         int64_t off;
-        while (archive_read_data_block(a, &buf, &len, &off) == ARCHIVE_OK) {
+        int d;
+        while ((d = archive_read_data_block(a, &buf, &len, &off)) == ARCHIVE_OK) {
             /* Holes before a block read as zeros, as hold's reader gives them. */
             for (; (int64_t)n < off; n++) h = (h ^ 0) * 0x100000001b3ULL;
             for (size_t i = 0; i < len; i++, n++) h = (h ^ ((const unsigned char *)buf)[i]) * 0x100000001b3ULL;
@@ -47,9 +63,15 @@ int main(int argc, char **argv) {
         /* A file's trailing hole; other entries' size fields carry no data. */
         if (archive_entry_filetype(e) == AE_IFREG)
             for (; (int64_t)n < archive_entry_size(e); n++) h = (h ^ 0) * 0x100000001b3ULL;
+        if (d != ARCHIVE_EOF) {
+            /* An entry whose contents are refused: named, and the next read. */
+            printf("error %s\n", archive_error_string(a));
+            if (d == ARCHIVE_FATAL) break;
+            continue;
+        }
         const char *link = archive_entry_hardlink(e) ? archive_entry_hardlink(e) : archive_entry_symlink(e);
         printf("%s %lld %o %lld %016llx %s\t%s\n", kind(e), (long long)n, archive_entry_perm(e) | (archive_entry_mode(e) & 07000),
-               (long long)archive_entry_mtime(e), (unsigned long long)h, archive_entry_pathname(e), link ? link : "");
+               (long long)archive_entry_mtime(e), (unsigned long long)h, name(e), link ? link : "");
     }
     if (r != ARCHIVE_EOF) {
         printf("error %s\n", archive_error_string(a));

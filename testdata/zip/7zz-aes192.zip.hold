@@ -1,0 +1,8 @@
+# 7-Zip and Windows writers store the exact NTFS time; libarchive reads the two-second DOS time beside it (and as local time), hold the NTFS time.
+# AES-192 is refused by name: Zig's std has no AES-192 (design §0).
+directory 0 755 1577934245 cbf29ce484222325 dir/	
+error UnsupportedEncryption
+error UnsupportedEncryption
+error UnsupportedEncryption
+error UnsupportedEncryption
+error UnsupportedEncryption

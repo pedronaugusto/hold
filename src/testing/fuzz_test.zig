@@ -61,3 +61,62 @@ fn numbers(_: void, smith: *std.testing.Smith) !void {
 test "fuzz_test: header numbers" {
     try std.testing.fuzz({}, numbers, .{ .corpus = &.{ "0000644\x00", "\x80\x00\x00\x01" } });
 }
+
+fn zipArchive(_: void, smith: *std.testing.Smith) !void {
+    const gpa = std.testing.allocator;
+    var bytes: [4096]u8 = undefined;
+    const n = smith.slice(&bytes);
+    var archive = hold.zip.Archive.open(gpa, .{ .memory = bytes[0..n] }, .{ .limits = .{ .window = .fromRaw(1 << 20) } }) catch |e| switch (e) {
+        error.Invalid, error.Unsupported, error.Overlap, error.LimitExceeded, error.Truncated => return,
+        else => return e,
+    };
+    defer archive.deinit();
+    var it = archive.iterate();
+    var count: usize = 0;
+    while (it.next()) |record| : (count += 1) {
+        if (count == 32) break;
+        var c: hold.zip.Archive.Contents = undefined;
+        archive.contents(&c, record, &.{}, .{}) catch continue; // a refused entry is named by its error; the next is read
+        defer c.deinit();
+        var sink_buffer: [256]u8 = undefined;
+        var sink: std.Io.Writer.Discarding = .init(&sink_buffer);
+        const got = c.reader().streamRemaining(&sink.writer) catch {
+            try std.testing.expect(c.err() != null);
+            continue;
+        };
+        try std.testing.expectEqual(record.entry.size, got);
+    }
+}
+
+test "fuzz_test: zip archives through the central directory" {
+    try std.testing.fuzz({}, zipArchive, .{ .corpus = &.{
+        "PK\x05\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00",
+    } });
+}
+
+fn zipStream(_: void, smith: *std.testing.Smith) !void {
+    const gpa = std.testing.allocator;
+    var bytes: [4096]u8 = undefined;
+    const n = smith.slice(&bytes);
+    var in: std.Io.Reader = .fixed(bytes[0..n]);
+    var st: hold.zip.Stream = .init(gpa, &in, &.{}, .{ .limits = .{ .window = .fromRaw(1 << 20), .entry = .fromRaw(1 << 20) } });
+    defer st.deinit();
+    var count: usize = 0;
+    while (count < 32) : (count += 1) {
+        const record = st.next() catch |e| switch (e) {
+            error.Invalid, error.Unsupported, error.LimitExceeded, error.Truncated => return,
+            else => return e,
+        } orelse return;
+        _ = record;
+        var sink_buffer: [256]u8 = undefined;
+        var sink: std.Io.Writer.Discarding = .init(&sink_buffer);
+        _ = st.contents().streamRemaining(&sink.writer) catch {
+            try std.testing.expect(st.err() != null);
+            return;
+        };
+    }
+}
+
+test "fuzz_test: zip archives read forward" {
+    try std.testing.fuzz({}, zipStream, .{ .corpus = &.{"PK\x03\x04"} });
+}

@@ -1,0 +1,4 @@
+# PPMd is refused by name: no rival but libarchive and 7-Zip reads it, and warp has no PPMd (design §0).
+error UnsupportedMethod
+error UnsupportedMethod
+error UnsupportedMethod

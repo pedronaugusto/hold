@@ -1,0 +1,4 @@
+directory 0 755 1577934246 cbf29ce484222325 dir/	
+file 6 644 1577934246 a9bc80cca21f28b3 dir/a.txt	
+file 8 644 1577934246 4cb49c4e2e50bc1e dé.txt	
+error Unsupported ZIP compression method during decompression of link entry (99: aes)

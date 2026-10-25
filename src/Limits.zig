@@ -30,6 +30,17 @@ pub fn over(limit: Bytes, n: u64) bool {
     return Bytes.fromRaw(n).compare(limit) == .gt;
 }
 
+/// Whether `n` entries are past `limit`.
+pub fn overEntries(limit: Entries, n: u64) bool {
+    return Entries.fromRaw(n).compare(limit) == .gt;
+}
+
+/// The bytes `limit` leaves after `used`.
+pub fn left(limit: Bytes, used: u64) u64 {
+    const rest = limit.sub(Bytes.fromRaw(used)) catch return 0;
+    return rest.raw();
+}
+
 /// Whether one more entry than `n` would be past `limit`.
 pub fn full(limit: Entries, n: u64) bool {
     return Entries.fromRaw(n).compare(limit) != .lt;

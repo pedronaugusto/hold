@@ -9,3 +9,5 @@ pub const Limits = @import("Limits.zig");
 pub const Diagnostic = @import("Diagnostic.zig");
 /// tar archives.
 pub const tar = @import("tar.zig");
+/// zip archives.
+pub const zip = @import("zip.zig");

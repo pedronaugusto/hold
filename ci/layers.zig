@@ -6,6 +6,12 @@ pub const layers: []const gantry.rules.Layer = &.{
         "src/Entry.zig",
         "src/Limits.zig",
         "src/Diagnostic.zig",
+        "src/text.zig",
+    } },
+    .{ .name = "streams and codecs", .patterns = &.{
+        "src/Bounded.zig",
+        "src/Checked.zig",
+        "src/codec.zig",
     } },
     .{ .name = "tar fields", .patterns = &.{
         "src/tar/header.zig",
@@ -15,7 +21,20 @@ pub const layers: []const gantry.rules.Layer = &.{
         "src/tar/Reader.zig",
         "src/tar/Writer.zig",
     } },
-    .{ .name = "formats", .patterns = &.{"src/tar.zig"} },
+    .{ .name = "zip records", .patterns = &.{
+        "src/zip/format.zig",
+        "src/zip/aes.zig",
+    } },
+    .{ .name = "zip entries", .patterns = &.{"src/zip/Record.zig"} },
+    .{ .name = "zip", .patterns = &.{
+        "src/zip/Archive.zig",
+        "src/zip/Stream.zig",
+        "src/zip/Writer.zig",
+    } },
+    .{ .name = "formats", .patterns = &.{
+        "src/tar.zig",
+        "src/zip.zig",
+    } },
     .{ .name = "public", .patterns = &.{"src/hold.zig"} },
 };
 

@@ -74,8 +74,79 @@ GO
 go run "$work/gotar.go" "$out/go-pax.tar"
 7zz a -ttar -snl "$out/7zz.tar" $files > /dev/null
 ls -l "$out"
+
+# zip: the same kind of tree, by each zip writer.
+zout=$(dirname "$out")/zip
+mkdir -p "$zout"
+rm -f "$zout"/*.zip
+z=$work/ztree
+mkdir -p "$z/dir"
+printf 'hello\n' > "$z/dir/a.txt"
+python3 -c "print('text line\n'*5000, end='')" > "$z/text.txt"
+python3 -c "import random; random.seed(7); open('$z/rand.bin','wb').write(bytes(random.getrandbits(8) for _ in range(50000)))"
+printf 'unicode\n' > "$z/dé.txt"
+ln -s dir/a.txt "$z/link"
+touch -h -t 202001020304.05 "$z/dir" "$z/dir/a.txt" "$z/text.txt" "$z/rand.bin" "$z/dé.txt" "$z/link"
+cd "$z"
+zfiles="dir dir/a.txt text.txt rand.bin dé.txt link"
+zip -q -X -y "$zout/infozip-deflate.zip" $zfiles
+zip -q -X -y -0 "$zout/infozip-store.zip" $zfiles
+zip -q -X -y -fz "$zout/infozip-zip64.zip" $zfiles
+cat text.txt | zip -q -X > "$zout/infozip-stdin.zip"
+COPYFILE_DISABLE=1 bsdtar --format zip -cf "$zout/bsdtar-deflate.zip" $zfiles
+COPYFILE_DISABLE=1 bsdtar --format zip --options zip:compression=store -cf "$zout/bsdtar-store.zip" $zfiles
+for c in zstd bzip2 lzma xz; do
+  COPYFILE_DISABLE=1 "$(brew --prefix libarchive)/bin/bsdtar" --format zip --options zip:compression=$c -cf "$zout/bsdtar38-$c.zip" $zfiles
+done
+python3 - "$zout" <<'PY'
+import sys, zipfile, os
+out = sys.argv[1]
+for name, method in (("deflate", zipfile.ZIP_DEFLATED), ("store", zipfile.ZIP_STORED), ("bzip2", zipfile.ZIP_BZIP2), ("lzma", zipfile.ZIP_LZMA)):
+    with zipfile.ZipFile(os.path.join(out, f"python-{name}.zip"), "w", method) as zf:
+        for f in ["dir", "dir/a.txt", "text.txt", "rand.bin", "dé.txt"]:
+            zf.write(f)
+PY
+cat > "$work/gozip.go" <<'GO'
+package main
+
+import (
+	"archive/zip"
+	"io"
+	"os"
+)
+
+func main() {
+	f, _ := os.Create(os.Args[1])
+	w := zip.NewWriter(f)
+	for _, name := range []string{"dir/a.txt", "text.txt", "rand.bin", "dé.txt"} {
+		info, _ := os.Stat(name)
+		h, _ := zip.FileInfoHeader(info)
+		h.Name = name
+		h.Method = zip.Deflate
+		out, _ := w.CreateHeader(h)
+		in, _ := os.Open(name)
+		io.Copy(out, in)
+		in.Close()
+	}
+	w.SetComment("go comment")
+	w.Close()
+	f.Close()
+}
+GO
+go run "$work/gozip.go" "$zout/go-deflate.zip"
+7zz a -tzip -snl "$zout/7zz-deflate.zip" $zfiles > /dev/null
+7zz a -tzip -snl -mm=Deflate64 "$zout/7zz-deflate64.zip" $zfiles > /dev/null
+7zz a -tzip -snl -mm=BZip2 "$zout/7zz-bzip2.zip" $zfiles > /dev/null
+7zz a -tzip -snl -phold -mem=AES256 "$zout/7zz-aes256.zip" $zfiles > /dev/null
+7zz a -tzip -snl -phold -mem=AES128 "$zout/7zz-aes128.zip" $zfiles > /dev/null
+7zz a -tzip -snl -phold -mem=AES192 "$zout/7zz-aes192.zip" $zfiles > /dev/null
+7zz a -tzip -snl -phold -mem=ZipCrypto "$zout/7zz-zipcrypto.zip" $zfiles > /dev/null
+cd - > /dev/null
+
 # The manifests libarchive reads from each archive, here and in the
 # libarchive corpus (decoded from its test/*.uu by hand).
 P=$(brew --prefix libarchive)
 cc -O2 -I"$P/include" "$(dirname "$out")/tools/manifest.c" -L"$P/lib" -larchive -o "$work/manifest"
-for f in "$out"/*.tar "$(dirname "$out")"/libarchive/*.tar; do "$work/manifest" "$f" > "$f.manifest"; done
+for f in "$out"/*.tar "$(dirname "$out")"/libarchive/*.tar "$zout"/*.zip "$(dirname "$out")"/libarchive/*.zip "$(dirname "$out")"/libarchive/*.zipx; do
+  if [ -f "$f" ]; then TZ=UTC "$work/manifest" "$f" > "$f.manifest"; fi
+done

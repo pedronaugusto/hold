@@ -1,0 +1,3 @@
+# Traditional PKWARE encryption is refused by name (design §0).
+error UnsupportedEncryption
+error UnsupportedEncryption

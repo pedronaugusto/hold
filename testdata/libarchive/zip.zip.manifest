@@ -1,0 +1,3 @@
+directory 0 755 1179604249 cbf29ce484222325 dir/	
+file 18 755 1179604289 691df94ae4dabd3f file1	
+error ZIP bad CRC: 0x3d66373a should be 0x78787878

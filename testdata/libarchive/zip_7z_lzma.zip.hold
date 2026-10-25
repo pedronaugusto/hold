@@ -1,0 +1,10 @@
+# warp has no decoder for this method yet (bzip2, LZMA, xz: warp-dense; Deflate64: warp-fast, on a branch); hold refuses it by name, entry by entry. The line becomes libarchive's when warp has it.
+directory 0 750 1599179462 cbf29ce484222325 _installdir/	
+directory 0 750 1599179408 cbf29ce484222325 _installdir/abc_tools/	
+directory 0 750 1599179280 cbf29ce484222325 _installdir/abc_tools/2000.9-beta11/	
+directory 0 750 1599179770 cbf29ce484222325 _installdir/abc_tools/2000.9-beta11/bin/	
+error UnsupportedMethod
+directory 0 750 1599179502 cbf29ce484222325 _installdir/abc_tools/2000.9-beta11/samples/	
+directory 0 750 1599179240 cbf29ce484222325 _installdir/abc_tools/2000.9-beta11/samples/abc_measurement_analysis_sample/	
+directory 0 750 1599179898 cbf29ce484222325 _installdir/abc_tools/2000.9-beta11/samples/abc_measurement_analysis_sample/src/	
+error UnsupportedMethod

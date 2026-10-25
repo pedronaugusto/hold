@@ -1,0 +1,6 @@
+# warp has no decoder for this method yet (bzip2, LZMA, xz: warp-dense; Deflate64: warp-fast, on a branch); hold refuses it by name, entry by entry. The line becomes libarchive's when warp has it.
+directory 0 755 1577934244 cbf29ce484222325 dir/	
+error UnsupportedMethod
+error UnsupportedMethod
+error UnsupportedMethod
+error UnsupportedMethod
