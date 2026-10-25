@@ -6,8 +6,16 @@ follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Deflate64: zip entries of method 9 and 7z folders with coder 040109 read
+  through warp's streaming Deflate64 decoder (64 KiB window, within
+  `Limits.window`). 7-Zip's Deflate64 zip reads as libarchive reads it;
+  its Deflate64 7z, which libarchive 3.8.9 cannot read, is read in full.
+
 ### Changed
 
+- Pins warp 0.4.4, for its Deflate64 decoder.
 - Development: the rival programs and the scripts that drove the rivals'
   tools (`bench/rivals.sh` and `bench/rivals/`, `testdata/make.sh`,
   `testdata/interop.sh`, `testdata/git/make.sh`, `testdata/tools/manifest.c`)

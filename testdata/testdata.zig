@@ -191,7 +191,7 @@ pub const sevenz = [_]Case{
     .{ .name = "sevenz/7zz-deflate-nonsolid.7z", .archive = @embedFile("sevenz/7zz-deflate-nonsolid.7z"), .manifest = @embedFile("sevenz/7zz-deflate-nonsolid.7z.manifest") },
     .{ .name = "sevenz/7zz-deflate-times.7z", .archive = @embedFile("sevenz/7zz-deflate-times.7z"), .manifest = @embedFile("sevenz/7zz-deflate-times.7z.manifest") },
     .{ .name = "sevenz/7zz-deflate.7z", .archive = @embedFile("sevenz/7zz-deflate.7z"), .manifest = @embedFile("sevenz/7zz-deflate.7z.manifest") },
-    .{ .name = "sevenz/7zz-deflate64.7z", .archive = @embedFile("sevenz/7zz-deflate64.7z"), .manifest = @embedFile("sevenz/7zz-deflate64.7z.manifest") },
+    .{ .name = "sevenz/7zz-deflate64.7z", .archive = @embedFile("sevenz/7zz-deflate64.7z"), .manifest = @embedFile("sevenz/7zz-deflate64.7z.hold") },
     .{ .name = "sevenz/7zz-lzma2.7z", .archive = @embedFile("sevenz/7zz-lzma2.7z"), .manifest = @embedFile("sevenz/7zz-lzma2.7z.hold") },
     .{ .name = "sevenz/bsdtar38-bzip2.7z", .archive = @embedFile("sevenz/bsdtar38-bzip2.7z"), .manifest = @embedFile("sevenz/bsdtar38-bzip2.7z.hold") },
     .{ .name = "sevenz/bsdtar38-deflate.7z", .archive = @embedFile("sevenz/bsdtar38-deflate.7z"), .manifest = @embedFile("sevenz/bsdtar38-deflate.7z.hold") },

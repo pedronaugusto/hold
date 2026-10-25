@@ -67,7 +67,7 @@ pub fn dev(b: *std.Build, tools: type) void {
         .root_module = b.createModule(.{ .root_source_file = p.path("testdata/tools/index.zig"), .target = target, .optimize = optimize }),
     });
     const index_run = b.addRunArtifact(index);
-    index_run.addDirectoryArg(p.path("testdata"));
+    index_run.addDirectoryArg2(p.path("testdata"), .{});
     b.step("testdata-index", "Write testdata/testdata.zig, the interop corpus's index").dependOn(&index_run.step);
     check.dependOn(&index.step);
 

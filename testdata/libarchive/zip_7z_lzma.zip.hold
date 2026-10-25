@@ -1,4 +1,4 @@
-# warp has no decoder for this method yet (bzip2, LZMA, xz: warp-dense; Deflate64: warp-fast, on a branch); hold refuses it by name, entry by entry. The line becomes libarchive's when warp has it.
+# warp has no decoder for this method yet (bzip2, LZMA, xz); hold refuses it by name, entry by entry. The line becomes libarchive's when warp has it.
 directory 0 750 1599179462 cbf29ce484222325 _installdir/	
 directory 0 750 1599179408 cbf29ce484222325 _installdir/abc_tools/	
 directory 0 750 1599179280 cbf29ce484222325 _installdir/abc_tools/2000.9-beta11/	

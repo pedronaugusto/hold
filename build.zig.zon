@@ -19,8 +19,8 @@
             .hash = "aegis-0.1.17-rsxouvg5CABaJmNEkRXQIkVJ6JqVOG7NN60ctSBvSzO_",
         },
         .warp = .{
-            .url = "git+https://github.com/pedronaugusto/warp?ref=v0.4.3#e9ee3d8c277ac32ba4c16544a8849bedf41bfb2b",
-            .hash = "warp-0.4.3-JASxFSNwEQBiJfBqB-hDA0nGh5I0KVMnt79cTfL_gxrP",
+            .url = "git+https://github.com/pedronaugusto/warp?ref=v0.4.4#c0e0d247f2097359d623e3481c9bbbf22f394fc5",
+            .hash = "warp-0.4.4-JASxFZ2CFAAoAjfXDAlMUK0o8_l2YvL4lWldUFGD9uwJ",
         },
         .airlock = .{
             .url = "git+https://github.com/pedronaugusto/airlock?ref=v0.5.4#72d37e0d3610feb51833e783e52e6b1fd8e3ce5f",

@@ -65,6 +65,14 @@ pub const Decoder = struct {
                 d.buffer = try gpa.alloc(u8, (1 << 15) + 4096);
                 d.state = .{ .deflate = .init(input, d.buffer, inflate) };
             },
+            .deflate64 => {
+                // Zip method 9 and 7z's Deflate64 coder: DEFLATE's engine with
+                // the extended alphabet and a 64 KiB window.
+                const inflate: warp.Inflate.Options = .{ .accept = .raw, .format = .deflate64 };
+                if (Limits.over(limits.window, inflate.windowLen())) return error.LimitExceeded;
+                d.buffer = try gpa.alloc(u8, inflate.windowLen() + 4096);
+                d.state = .{ .deflate = .init(input, d.buffer, inflate) };
+            },
             .zstd => {
                 // The frame's own header names its window: the buffer is
                 // sized by it, after it is checked against the limit.
