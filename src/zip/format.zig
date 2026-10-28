@@ -3,6 +3,7 @@
 //! fields hold reads and writes, and DOS times.
 const std = @import("std");
 const Io = std.Io;
+const time = @import("../time.zig");
 
 pub const local_sig: u32 = 0x04034b50;
 pub const central_sig: u32 = 0x02014b50;
@@ -291,9 +292,7 @@ pub fn ntfsMtime(data: []const u8) ?Io.Timestamp {
         if (data.len - at < len) return null;
         if (tag == 1 and len >= 8) {
             const ticks = std.mem.readInt(u64, data[at..][0..8], .little);
-            // 100 ns since 1601.
-            const ns = @as(i96, ticks) * 100 - @as(i96, 11_644_473_600) * std.time.ns_per_s;
-            return .{ .nanoseconds = ns };
+            return time.fromFiletime(ticks);
         }
         at += len;
     }
@@ -352,21 +351,21 @@ pub const Aes = struct {
 /// A DOS date and time (local time by the format, two-second steps) read
 /// as UTC: zip gives no zone, and Go reads it so; an extended timestamp
 /// or an NTFS time, when present, is the real one.
-pub fn fromDos(date: u16, time: u16) Io.Timestamp {
+pub fn fromDos(date: u16, of_day: u16) Io.Timestamp {
     const year: i64 = 1980 + @as(i64, date >> 9);
     const month: i64 = std.math.clamp(@as(i64, (date >> 5) & 0xf), 1, 12);
     const day: i64 = std.math.clamp(@as(i64, date & 0x1f), 1, 31);
-    const hour: i64 = @min(@as(i64, time >> 11), 23);
-    const minute: i64 = @min(@as(i64, (time >> 5) & 0x3f), 59);
-    const second: i64 = @min(@as(i64, time & 0x1f) * 2, 59);
+    const hour: i64 = @min(@as(i64, of_day >> 11), 23);
+    const minute: i64 = @min(@as(i64, (of_day >> 5) & 0x3f), 59);
+    const second: i64 = @min(@as(i64, of_day & 0x1f) * 2, 59);
     const days = daysFromCivil(year, month, day);
-    return .{ .nanoseconds = @as(i96, ((days * 24 + hour) * 60 + minute) * 60 + second) * std.time.ns_per_s };
+    return time.fromSeconds(((days * 24 + hour) * 60 + minute) * 60 + second);
 }
 
 /// A timestamp as a DOS date and time, in UTC; before 1980 it is 1980's
 /// first second, past 2107 the last DOS time.
 pub fn toDos(t: Io.Timestamp) struct { date: u16, time: u16 } {
-    const secs: i64 = @intCast(std.math.clamp(@divFloor(t.nanoseconds, std.time.ns_per_s), 315532800, 4354819198));
+    const secs: i64 = @intCast(std.math.clamp(time.wholeSeconds(t), 315532800, 4354819198));
     const days = @divFloor(secs, 86400);
     const rem = secs - days * 86400;
     const civil = civilFromDays(days);

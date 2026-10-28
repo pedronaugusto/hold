@@ -2,6 +2,7 @@
 //! the length counting the whole record, its own digits included.
 const std = @import("std");
 const Io = std.Io;
+const time = @import("../time.zig");
 
 pub const Record = struct { key: []const u8, value: []const u8 };
 
@@ -56,38 +57,36 @@ pub fn parseTime(text: []const u8) TimeError!Io.Timestamp {
     if (negative) s = s[1..];
     const dot = std.mem.findScalar(u8, s, '.') orelse s.len;
     if (dot == 0) return error.InvalidTime;
-    const whole = std.fmt.parseUnsigned(u64, s[0..dot], 10) catch return error.InvalidTime;
-    var nanos: u64 = 0;
+    // Seconds past an i64's, some 292 billion years, are no time.
+    const whole = std.fmt.parseUnsigned(u63, s[0..dot], 10) catch return error.InvalidTime;
+    var nanos: u32 = 0;
     if (dot < s.len) {
         const frac = s[dot + 1 ..];
         if (frac.len == 0) return error.InvalidTime;
-        var scale: u64 = 100_000_000;
+        var scale: u32 = 100_000_000;
         for (frac) |c| {
             if (c < '0' or c > '9') return error.InvalidTime;
             nanos += (c - '0') * scale;
             scale /= 10;
         }
     }
-    const total: i96 = @as(i96, whole) * std.time.ns_per_s + nanos;
-    return .{ .nanoseconds = if (negative) -total else total };
+    return time.fromParts(negative, whole, nanos);
 }
 
 /// A time as `parseTime` reads it: whole seconds, and a fraction only when
 /// there is one, its trailing zeros dropped.
 pub fn formatTime(t: Io.Timestamp, buffer: *[40]u8) []const u8 {
-    const ns = t.nanoseconds;
-    const sign = if (ns < 0) "-" else "";
-    // The most negative time's magnitude has no positive i96.
-    const mag: u96 = @abs(ns);
-    const secs = mag / std.time.ns_per_s;
-    var frac: u96 = mag % std.time.ns_per_s;
-    if (frac == 0) return std.fmt.bufPrint(buffer, "{s}{d}", .{ sign, secs }) catch unreachable; // aegis: no-danger: 40 bytes hold any i96 time: a sign, 20 digits of seconds and ten of the fraction
+    const p = time.parts(t);
+    const sign = if (p.negative) "-" else "";
+    const secs = p.whole;
+    var frac = p.nanos;
+    if (frac == 0) return std.mem.print(buffer, "{s}{d}", .{ sign, secs }) catch unreachable; // 40 bytes hold any i96 time: a sign, 20 digits of seconds and ten of the fraction
     var digits: usize = 9;
     while (frac % 10 == 0) {
         frac /= 10;
         digits -= 1;
     }
-    return std.fmt.bufPrint(buffer, "{s}{d}.{d:0>[3]}", .{ sign, secs, frac, digits }) catch unreachable; // aegis: no-danger: 40 bytes hold any i96 time: a sign, 20 digits of seconds and ten of the fraction
+    return std.mem.print(buffer, "{s}{d}.{d:0>[3]}", .{ sign, secs, frac, digits }) catch unreachable; // 40 bytes hold any i96 time: a sign, 20 digits of seconds and ten of the fraction
 }
 
 test Iterator {

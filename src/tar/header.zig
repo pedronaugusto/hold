@@ -142,7 +142,7 @@ pub fn putBase256(field: []u8, value: i64) void {
 /// A time's whole seconds, in octal where they fit and base-256 where
 /// they do not (GNU's atime and ctime).
 pub fn putTime(field: []u8, t: @import("std").Io.Timestamp) void {
-    const secs: i64 = @intCast(std.math.clamp(@divFloor(t.nanoseconds, std.time.ns_per_s), std.math.minInt(i64), std.math.maxInt(i64)));
+    const secs: i64 = @intCast(std.math.clamp(@import("../time.zig").wholeSeconds(t), std.math.minInt(i64), std.math.maxInt(i64)));
     if (secs >= 0 and fitsOctal(field.len, @intCast(secs))) putOctal(field, @intCast(secs)) else putBase256(field, secs);
 }
 

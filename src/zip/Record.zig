@@ -72,20 +72,9 @@ pub fn describe(r: *Record) void {
             r.cp437 = false;
         }
     }
-    const unix = r.external >> 16;
-    e.kind = .file;
-    if (host != null and host.?.unixMode() and unix != 0) {
-        e.mode = unix & 0o7777;
-        // zip has no device numbers: a device or a pipe in its mode is
-        // what the writer read its contents from (Info-ZIP archiving its
-        // standard input records a pipe), and the entry is a file.
-        e.kind = switch (unix & 0o170000) {
-            0o040000 => .directory,
-            0o120000 => .symlink,
-            else => .file,
-        };
-    }
-    if (e.kind == .file and ((e.name.len != 0 and e.name[e.name.len - 1] == '/') or r.external & 0x10 != 0)) e.kind = .directory;
+    const unix: ?u32 = if (host != null and host.?.unixMode() and r.external >> 16 != 0) r.external >> 16 else null;
+    if (unix) |m| e.mode = m & 0o7777;
+    e.kind = kindOf(unix, e.name, r.external);
     if (format.findExtra(r.extra, format.Extra.unix_ids) catch null) |data| {
         if (format.unixIds(data)) |ids| {
             e.uid = ids.uid;
@@ -117,4 +106,19 @@ pub fn describe(r: *Record) void {
             }
         }
     }
+}
+
+/// The entry's kind: from a Unix mode where the record has one, else a
+/// directory by its name's `/` or the DOS directory attribute. zip has no
+/// device numbers: a device or a pipe in a mode is what the writer read
+/// its contents from (Info-ZIP archiving its standard input records a
+/// pipe), and the entry is a file.
+fn kindOf(unix: ?u32, name: []const u8, external: u32) Entry.Kind {
+    if (unix) |m| switch (m & 0o170000) {
+        0o040000 => return .directory,
+        0o120000 => return .symlink,
+        else => {},
+    };
+    const dir = (name.len != 0 and name[name.len - 1] == '/') or external & 0x10 != 0;
+    return if (dir) .directory else .file;
 }

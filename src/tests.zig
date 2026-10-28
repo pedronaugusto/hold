@@ -4,6 +4,7 @@ test {
     _ = @import("hold.zig");
     _ = @import("tar/header.zig");
     _ = @import("tar/pax.zig");
+    _ = @import("time.zig");
     _ = @import("tar/Reader.zig");
     _ = @import("tar/Writer.zig");
     _ = @import("Checked.zig");

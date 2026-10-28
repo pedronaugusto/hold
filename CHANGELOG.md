@@ -30,6 +30,15 @@ follow [Semantic Versioning](https://semver.org/).
 - Pins aegis 0.2.3, the 0.2 line, airlock 0.6.0 and xenoglyph 0.5.1, and
   warp at its 0.5.0 car until the tag; developed with shakedown 0.6.0 and
   preflight 0.18.5.
+- AES keys, key schedules, MAC states and keystreams are held in aegis
+  `Secret`s and compared through `aegis.secret.equal`; 7z AES no longer
+  wipes the staged plaintext, which is the caller's to read, as zip AES's
+  never was.
+- Times convert through aegis instants in one place (Unix seconds, pax
+  seconds and nanoseconds, FILETIME); a pax time past an i64's seconds is
+  `error.InvalidTime`.
+- A tar entry's pax records, GNU long name and link are each read into an
+  allocation of their own, released at the next entry.
 - A zstd stream is decoded frame by frame, each over the window its own
   header names: 7-Zip's zstd folders start with an empty frame of a small
   window, and their data frame's larger one was refused.

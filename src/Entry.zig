@@ -3,6 +3,7 @@
 //! its next entry, or from the caller while a writer takes the entry.
 const std = @import("std");
 const Io = std.Io;
+const time = @import("time.zig");
 
 /// What the entry is.
 pub const Kind = enum {
@@ -63,5 +64,5 @@ device: Device = .{},
 
 /// A timestamp from whole seconds since the epoch.
 pub fn seconds(s: i64) Io.Timestamp {
-    return .{ .nanoseconds = @as(i96, s) * std.time.ns_per_s };
+    return time.fromSeconds(s);
 }

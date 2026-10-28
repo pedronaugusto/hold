@@ -46,10 +46,11 @@ done: bool = false,
 block: header.Block = undefined,
 /// Private: a ustar name joined from its prefix and name.
 joined: [header.prefix.len + 1 + header.name.len]u8 = undefined,
-/// Private: the current entry's pax records, GNU long name and link.
-local: std.ArrayList(u8) = .empty,
-long_name: std.ArrayList(u8) = .empty,
-long_link: std.ArrayList(u8) = .empty,
+/// Private: the current entry's pax records, GNU long name and link, each
+/// read whole into its own allocation and released at the next entry.
+local: []u8 = &.{},
+long_name: []u8 = &.{},
+long_link: []u8 = &.{},
 /// Private: the pax records every later entry takes, re-encoded.
 global: std.ArrayList(u8) = .empty,
 /// Private: the current entry's sparse map, empty for a plain file.
@@ -92,9 +93,7 @@ pub fn init(gpa: Allocator, input: *Io.Reader, buffer: []u8, options: Options) R
 }
 
 pub fn deinit(r: *Reader) void {
-    r.local.deinit(r.gpa);
-    r.long_name.deinit(r.gpa);
-    r.long_link.deinit(r.gpa);
+    r.releaseExtensions();
     r.global.deinit(r.gpa);
     r.sparse.deinit(r.gpa);
     r.* = undefined;
@@ -105,9 +104,7 @@ pub fn deinit(r: *Reader) void {
 pub fn next(r: *Reader) NextError!?Entry {
     if (r.done) return null;
     try r.skipRest();
-    r.local.clearRetainingCapacity();
-    r.long_name.clearRetainingCapacity();
-    r.long_link.clearRetainingCapacity();
+    r.releaseExtensions();
     r.sparse.clearRetainingCapacity();
     var saw_extension = false;
     while (true) {
@@ -135,28 +132,26 @@ pub fn next(r: *Reader) NextError!?Entry {
                 saw_extension = true;
             },
             'x', 'X' => {
-                try r.readData(&r.local, size, at);
-                try r.checkRecords(r.local.items, at);
+                try r.readExtension(&r.local, size, at);
+                try r.checkRecords(r.local, at);
                 r.pax_seen = true;
                 saw_extension = true;
             },
             'g' => {
-                var data: std.ArrayList(u8) = .empty;
-                defer data.deinit(r.gpa);
-                try r.readData(&data, size, at);
-                try r.checkRecords(data.items, at);
-                try r.mergeGlobal(data.items);
+                var data: []u8 = &.{};
+                defer r.gpa.free(data);
+                try r.readExtension(&data, size, at);
+                try r.checkRecords(data, at);
+                try r.mergeGlobal(data);
                 r.pax_seen = true;
                 saw_extension = true;
             },
             'L' => {
-                try r.readData(&r.long_name, size, at);
-                trimNul(&r.long_name);
+                try r.readExtension(&r.long_name, size, at);
                 saw_extension = true;
             },
             'K' => {
-                try r.readData(&r.long_link, size, at);
-                trimNul(&r.long_link);
+                try r.readExtension(&r.long_link, size, at);
                 saw_extension = true;
             },
             else => return try r.entry(at, flag, size),
@@ -195,7 +190,7 @@ pub fn segments(r: *const Reader) []const Segment {
 /// The current entry's pax records, then the global ones it takes, in
 /// order; a key may appear in both, the first one found applying.
 pub fn records(r: *const Reader) Records {
-    return .{ .local = .{ .data = r.local.items }, .global = .{ .data = r.global.items } };
+    return .{ .local = .{ .data = r.local }, .global = .{ .data = r.global.items } };
 }
 
 pub const Records = struct {
@@ -245,13 +240,13 @@ fn readBlock(r: *Reader, b: *header.Block, pending: bool) NextError!bool {
 }
 
 /// An extension header's data, bounded, then its padding.
-fn readData(r: *Reader, list: *std.ArrayList(u8), size: u64, at: u64) NextError!void {
+fn readExtension(r: *Reader, data: *[]u8, size: u64, at: u64) NextError!void {
     if (Limits.over(r.options.limits.header, size)) return r.fail(at, .header_limit, error.LimitExceeded);
-    list.clearRetainingCapacity();
-    const n: usize = @intCast(size);
-    try list.ensureTotalCapacity(r.gpa, n);
-    list.items.len = n;
-    r.input.readSliceAll(list.items) catch |e| switch (e) {
+    // A second extension of a kind before the entry replaces the first.
+    r.gpa.free(data.*);
+    data.* = &.{};
+    data.* = try r.gpa.alloc(u8, @intCast(size));
+    r.input.readSliceAll(data.*) catch |e| switch (e) {
         error.EndOfStream => return r.fail(r.offset, .truncated, error.Truncated),
         error.ReadFailed => return error.ReadFailed,
     };
@@ -303,12 +298,21 @@ fn find(data: []const u8, key: []const u8) ?[]const u8 {
 /// The value an entry takes for `key`: its own record's, else the global
 /// one's; an empty local value unsets the global one.
 fn value(r: *const Reader, key: []const u8) ?[]const u8 {
-    if (find(r.local.items, key)) |v| return if (v.len == 0) null else v;
+    if (find(r.local, key)) |v| return if (v.len == 0) null else v;
     return find(r.global.items, key);
 }
 
-fn trimNul(list: *std.ArrayList(u8)) void {
-    while (list.items.len != 0 and list.items[list.items.len - 1] == 0) list.items.len -= 1;
+/// The current entry's extensions' data, freed.
+fn releaseExtensions(r: *Reader) void {
+    inline for (.{ &r.local, &r.long_name, &r.long_link }) |data| {
+        r.gpa.free(data.*);
+        data.* = &.{};
+    }
+}
+
+/// A GNU long name or link without the NULs that pad it.
+fn trimNul(bytes: []const u8) []const u8 {
+    return std.mem.trimEnd(u8, bytes, "\x00");
 }
 
 fn padding(size: u64) u64 {
@@ -363,7 +367,7 @@ fn entry(r: *Reader, at: u64, flag: u8, header_size: u64) NextError!Entry {
     if (Limits.full(r.options.limits.entries, r.entries)) return r.fail(at, .entries_limit, error.LimitExceeded);
     const d = header.dialect(&r.block);
     r.flag = flag;
-    r.format = if (r.local.items.len != 0 or r.global.items.len != 0) .pax else switch (d) {
+    r.format = if (r.local.len != 0 or r.global.items.len != 0) .pax else switch (d) {
         .v7 => .v7,
         .ustar => .ustar,
         .gnu => .gnu,
@@ -376,8 +380,8 @@ fn entry(r: *Reader, at: u64, flag: u8, header_size: u64) NextError!Entry {
     if (r.value("path")) |p| {
         e.name = p;
         e.encoding = if (charset_binary) .unspecified else .utf8;
-    } else if (r.long_name.items.len != 0) {
-        e.name = r.long_name.items;
+    } else if (trimNul(r.long_name).len != 0) {
+        e.name = trimNul(r.long_name);
     } else {
         const n = header.string(header.name.of(&r.block));
         const pre = if (d == .ustar) header.string(header.prefix.of(&r.block)) else "";
@@ -390,8 +394,8 @@ fn entry(r: *Reader, at: u64, flag: u8, header_size: u64) NextError!Entry {
     }
     if (r.value("linkpath")) |l| {
         e.link = l;
-    } else if (r.long_link.items.len != 0) {
-        e.link = r.long_link.items;
+    } else if (trimNul(r.long_link).len != 0) {
+        e.link = trimNul(r.long_link);
     } else e.link = header.string(header.linkname.of(&r.block));
 
     e.mode = @intCast((try r.number(header.mode, at)) & 0o7777);
@@ -534,7 +538,7 @@ fn paxSparse(r: *Reader, at: u64, data_size: u64) NextError!?PaxSparse {
         // 0.0: the pairs as repeated records of the entry's own header,
         // in order.
         const size = try r.paxNumber("GNU.sparse.size", at) orelse return r.fail(at, .sparse_map, error.Invalid);
-        var it: pax.Iterator = .{ .data = r.local.items };
+        var it: pax.Iterator = .{ .data = r.local };
         var pending: ?u64 = null;
         while (it.next() catch return r.fail(at, .sparse_map, error.Invalid)) |rec| {
             if (std.mem.eql(u8, rec.key, "GNU.sparse.offset")) {

@@ -18,6 +18,7 @@ const format = @import("format.zig");
 const codec = @import("../codec.zig");
 const Entry = @import("../Entry.zig");
 const text = @import("../text.zig");
+const time = @import("../time.zig");
 
 pub const Method = codec.Method;
 
@@ -424,7 +425,7 @@ fn start(w: *Writer, h: Header, raw_info: ?Raw, known_in: ?Raw) BeginError!void 
 
 fn unixTime(e: Entry) ?i32 {
     const t = e.mtime orelse return null;
-    return std.math.cast(i32, @divFloor(t.nanoseconds, std.time.ns_per_s));
+    return std.math.cast(i32, time.wholeSeconds(t));
 }
 
 /// The descriptor if the entry has one, and its central record.
