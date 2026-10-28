@@ -533,10 +533,10 @@ fn paxSparse(r: *Reader, at: u64, data_size: u64) NextError!?PaxSparse {
     if (r.value("GNU.sparse.size")) |_| {
         // 0.0: the pairs as repeated records of the entry's own header,
         // in order.
-        const size = try r.paxNumber("GNU.sparse.size", at) orelse unreachable; // unreachable: present
+        const size = try r.paxNumber("GNU.sparse.size", at) orelse return r.fail(at, .sparse_map, error.Invalid);
         var it: pax.Iterator = .{ .data = r.local.items };
         var pending: ?u64 = null;
-        while (it.next() catch unreachable) |rec| { // unreachable: checked by checkRecords
+        while (it.next() catch return r.fail(at, .sparse_map, error.Invalid)) |rec| {
             if (std.mem.eql(u8, rec.key, "GNU.sparse.offset")) {
                 if (pending != null) return r.fail(at, .sparse_map, error.Invalid);
                 pending = std.fmt.parseUnsigned(u64, rec.value, 10) catch return r.fail(at, .sparse_map, error.Invalid);

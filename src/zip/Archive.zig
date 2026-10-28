@@ -127,8 +127,7 @@ pub const Iterator = struct {
     /// The next record; every record was checked by `open`.
     pub fn next(it: *Iterator) ?Record {
         if (it.at == it.archive.directory.len) return null;
-        const r = parseRecord(it.archive.directory, &it.at, it.archive.base) catch unreachable; // unreachable: checked by open
-        return r;
+        return parseRecord(it.archive.directory, &it.at, it.archive.base) catch unreachable; // aegis: no-danger: open parsed every record of this directory, whose bytes the archive owns and nothing changes
     }
 };
 
@@ -266,22 +265,32 @@ pub fn local(a: *Archive, record: Record, extra: *std.ArrayList(u8)) LocalError!
     extra.clearRetainingCapacity();
     try extra.resize(a.gpa, header.extra_len);
     try a.readAt(record.offset + format.local_len + header.name_len, extra.items);
+    // The fields Info-ZIP keeps here, the first of each id, found in the one pass that checks
+    // every field.
+    var unix_time: ?[]const u8 = null;
+    var unix_old: ?[]const u8 = null;
+    var unix_ids: ?[]const u8 = null;
     var it: format.ExtraIterator = .{ .bytes = extra.items };
-    while (it.next() catch return a.failContents(record.offset, .extra_field, error.Invalid)) |_| {}
+    while (it.next() catch return a.failContents(record.offset, .extra_field, error.Invalid)) |field| switch (field.id) {
+        format.Extra.unix_time => unix_time = unix_time orelse field.data,
+        format.Extra.unix_old => unix_old = unix_old orelse field.data,
+        format.Extra.unix_ids => unix_ids = unix_ids orelse field.data,
+        else => {},
+    };
     var r = record;
-    if (format.findExtra(extra.items, format.Extra.unix_time) catch unreachable) |data| { // unreachable: checked above
+    if (unix_time) |data| {
         const t = format.unixTimes(data);
         if (t.mtime) |s| r.entry.mtime = Entry.seconds(s);
         if (t.atime) |s| r.entry.atime = Entry.seconds(s);
         if (t.ctime) |s| r.entry.ctime = Entry.seconds(s);
     }
-    if (format.findExtra(extra.items, format.Extra.unix_old) catch unreachable) |data| { // unreachable: checked above
+    if (unix_old) |data| {
         if (format.unixOld(data)) |u| {
             if (u.uid) |id| r.entry.uid = id;
             if (u.gid) |id| r.entry.gid = id;
         }
     }
-    if (format.findExtra(extra.items, format.Extra.unix_ids) catch unreachable) |data| { // unreachable: checked above
+    if (unix_ids) |data| {
         if (format.unixIds(data)) |ids| {
             r.entry.uid = ids.uid;
             r.entry.gid = ids.gid;

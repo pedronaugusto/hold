@@ -101,7 +101,7 @@ pub fn signed(field: []const u8) NumberError!i64 {
     var v: u64 = 0;
     for (s[0..end]) |c| {
         if (v > std.math.maxInt(i64) >> 3) return error.InvalidNumber;
-        v = v << 3 | (c - '0');
+        v = (v << 3) | (c - '0');
     }
     return @intCast(v);
 }

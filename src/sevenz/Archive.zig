@@ -279,7 +279,7 @@ fn describe(arena: Allocator, f: header.File, e: *Entry) Allocator.Error!void {
     const dir = !f.stream and !f.empty_file;
     if (mode == 0) {
         mode = if (dir) 0o040777 else 0o100666;
-    } else if (dir and mode & 0o170000 != 0o040000) mode = mode & 0o7777 | 0o040000;
+    } else if (dir and mode & 0o170000 != 0o040000) mode = (mode & 0o7777) | 0o040000;
     if (attr & attribute_readonly != 0) mode &= ~@as(u32, 0o222);
     e.kind = switch (mode & 0o170000) {
         0o040000 => .directory,

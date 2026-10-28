@@ -6,6 +6,21 @@ follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Pins aegis 0.2.3, the 0.2 line, airlock 0.6.0 and xenoglyph 0.5.1, and
+  warp at its 0.5.0 car until the tag; developed with shakedown 0.6.0 and
+  preflight 0.18.5.
+- A malformed pax sparse map (GNU 0.0) and a zip whose extra fields break
+  are refused where they are read, with the diagnostic's `sparse_map` or
+  `extra_field`; the fields a local header holds are found in the one pass
+  that checks them.
+
+### Fixed
+
+- `tar.Writer` writes a pax time of the most negative nanoseconds an
+  `Io.Timestamp` holds, where taking its magnitude stopped a safe build.
+
 ## [0.1.1] - 2026-10-25
 
 ### Added

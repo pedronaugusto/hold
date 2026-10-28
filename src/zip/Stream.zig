@@ -103,10 +103,13 @@ pub fn next(s: *Stream) NextError!?Record {
     };
     const name = s.header.items[0..local.name_len];
     const extra = s.header.items[local.name_len..];
+    // The first ZIP64 field, found in the one pass that checks every field.
+    var zip64_data: ?[]const u8 = null;
     var it: format.ExtraIterator = .{ .bytes = extra };
-    while (it.next() catch return s.fail(.extra_field, error.Invalid)) |_| {}
+    while (it.next() catch return s.fail(.extra_field, error.Invalid)) |field| {
+        if (field.id == format.Extra.zip64 and zip64_data == null) zip64_data = field.data;
+    }
     var z: format.Zip64 = .{};
-    const zip64_data = format.findExtra(extra, format.Extra.zip64) catch unreachable; // unreachable: checked above
     if (zip64_data) |data| {
         z = format.Zip64.parse(data, local.size == 0xffffffff, local.compressed == 0xffffffff, false) catch return s.fail(.zip64, error.Invalid);
     }

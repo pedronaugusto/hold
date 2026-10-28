@@ -329,7 +329,7 @@ pub const Parser = struct {
             const id_len = flags & 0x0f;
             if (id_len > 8) return error.Invalid;
             var method: u64 = 0;
-            for (try p.take(id_len)) |b| method = method << 8 | b;
+            for (try p.take(id_len)) |b| method = (method << 8) | b;
             c.* = .{ .id = method, .props = "" };
             if (flags & 0x10 != 0) {
                 const i = try p.number();

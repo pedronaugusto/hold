@@ -64,11 +64,13 @@ pub const Reader = struct {
     staging: [16 * 1024]u8 = undefined,
 
     pub fn init(r: *Reader, inner: *Io.Reader, total: u64, strength: u8, password: *const aegis.SecretBytes) InitError!void {
-        const key_len: usize = switch (strength) {
-            1 => 16,
-            3 => 32,
+        // AES-128 or AES-256; WinZip's 2, AES-192, std has no cipher for.
+        const wide = switch (strength) {
+            1 => false,
+            3 => true,
             else => return error.UnsupportedEncryption,
         };
+        const key_len: usize = if (wide) 32 else 16;
         if (total < overhead(strength)) return error.Invalid;
         var salt: [16]u8 = undefined;
         const s = salt[0..saltLen(strength)];
@@ -78,17 +80,13 @@ pub const Reader = struct {
         var keys = aegis.Secret([2 * 32 + verifier_len]u8).init(undefined);
         defer keys.deinit();
         const k = keys.exposeMut()[0 .. 2 * key_len + verifier_len];
-        crypto.pwhash.pbkdf2(k, password.expose(), s, 1000, HmacSha1) catch unreachable; // unreachable: 1,000 rounds and 66 bytes are within PBKDF2's bounds
+        crypto.pwhash.pbkdf2(k, password.expose(), s, 1000, HmacSha1) catch unreachable; // aegis: no-danger: 1,000 rounds and at most 66 bytes are within PBKDF2's bounds, whatever the archive says
         if (!crypto.timing_safe.eql([verifier_len]u8, k[2 * key_len ..][0..verifier_len].*, verifier)) return error.WrongPassword;
         r.* = .{
             .interface = .{ .vtable = &vtable, .buffer = &.{}, .seek = 0, .end = 0 },
             .inner = inner,
             .left = total - overhead(strength),
-            .cipher = switch (strength) {
-                1 => .{ .a128 = .init(k[0..16].*) },
-                3 => .{ .a256 = .init(k[0..32].*) },
-                else => unreachable, // unreachable: refused above
-            },
+            .cipher = if (wide) .{ .a256 = .init(k[0..32].*) } else .{ .a128 = .init(k[0..16].*) },
             .mac = .init(k[key_len..][0..key_len]),
         };
         r.interface.buffer = &r.staging;

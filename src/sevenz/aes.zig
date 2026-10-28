@@ -42,8 +42,8 @@ pub fn parseProps(props: []const u8) PropsError!Props {
     if (b0 & 0xc0 == 0) return p;
     if (props.len < 2) return error.Invalid;
     const b1 = props[1];
-    const salt_len: usize = (b0 >> 7 & 1) + (b1 >> 4);
-    const iv_len: usize = (b0 >> 6 & 1) + (b1 & 0x0f);
+    const salt_len: usize = ((b0 >> 7) & 1) + (b1 >> 4);
+    const iv_len: usize = ((b0 >> 6) & 1) + (b1 & 0x0f);
     if (props.len != 2 + salt_len + iv_len) return error.Invalid;
     @memcpy(p.salt[0..salt_len], props[2..][0..salt_len]);
     p.salt_len = @intCast(salt_len);

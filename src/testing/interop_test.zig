@@ -66,10 +66,10 @@ fn tarManifest(gpa: std.mem.Allocator, archive: []const u8, out: *std.Io.Writer)
     var tr: hold.tar.Reader = .init(gpa, &in, &.{}, .{});
     defer tr.deinit();
     while (true) {
-        const e = tr.next() catch |err| {
+        const e = (tr.next() catch |err| {
             try out.print("error {s}\n", .{@errorName(err)});
             return;
-        } orelse return;
+        }) orelse return;
         var fnv: Fnv = .{};
         hashContents(&tr, e.size, &fnv) catch {
             try out.print("error {s}\n", .{@errorName(tr.err() orelse error.ReadFailed)});
@@ -174,10 +174,10 @@ fn zipStreamManifest(gpa: std.mem.Allocator, archive_bytes: []const u8, out: *st
     var st: hold.zip.Stream = .init(gpa, &in, &.{}, .{});
     defer st.deinit();
     while (true) {
-        const r = st.next() catch |err| {
+        const r = (st.next() catch |err| {
             try out.print("error {s}\n", .{@errorName(err)});
             return;
-        } orelse return;
+        }) orelse return;
         var fnv: Fnv = .{};
         var link: std.Io.Writer.Allocating = .init(gpa);
         defer link.deinit();
