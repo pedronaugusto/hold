@@ -35,6 +35,27 @@ pub const Source = union(enum) {
         }
     }
 
+    /// A reader of its own, at its own position however many are open: a
+    /// positional reader of the file, or a view of the memory.
+    pub const View = union { file: Io.File.Reader, memory: Io.Reader };
+
+    /// A reader from `offset` on that moves no other reader of the source,
+    /// for streams read side by side (a 7z folder's packed streams).
+    /// `buffer` is a file reader's.
+    pub fn independentAt(s: Source, offset: u64, view: *View, buffer: []u8) error{ReadFailed}!*Io.Reader {
+        switch (s) {
+            .file => |fr| {
+                view.* = .{ .file = .initSize(fr.file, fr.io, buffer, fr.size) };
+                view.file.seekTo(offset) catch return error.ReadFailed;
+                return &view.file.interface;
+            },
+            .memory => |m| {
+                view.* = .{ .memory = .fixed(m[@intCast(@min(offset, m.len))..]) };
+                return &view.memory;
+            },
+        }
+    }
+
     /// A reader from `offset` on: the file's own, moved there, or `view`
     /// over the memory.
     pub fn readerAt(s: Source, offset: u64, view: *Io.Reader) error{ReadFailed}!*Io.Reader {

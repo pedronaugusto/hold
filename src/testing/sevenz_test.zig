@@ -120,3 +120,41 @@ test "7z: a header written by hand reads" {
     var buf: [8]u8 = undefined;
     try std.testing.expectEqualStrings("abc", try readAll(&archive, item, &buf));
 }
+
+test "7z: BCJ2 reads its four packed streams side by side, from memory and from a file" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    const bytes = case("sevenz/7zz-bcj2.7z");
+    var from_memory = try hold.sevenz.Archive.open(gpa, .{ .memory = bytes }, .{});
+    defer from_memory.deinit();
+    var want: [32 * 1024]u8 = undefined;
+    const plain = try readAll(&from_memory, from_memory.entries()[0], &want);
+    try std.testing.expectEqual(@as(usize, 27328), plain.len);
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(io, .{ .sub_path = "bcj2.7z", .data = bytes });
+    const file = try tmp.dir.openFile(io, "bcj2.7z", .{});
+    defer file.close(io);
+    var file_buffer: [4096]u8 = undefined;
+    var fr = file.reader(io, &file_buffer);
+    var from_file = try hold.sevenz.Archive.open(gpa, .{ .file = &fr }, .{});
+    defer from_file.deinit();
+    var got: [32 * 1024]u8 = undefined;
+    try std.testing.expectEqualSlices(u8, plain, try readAll(&from_file, from_file.entries()[0], &got));
+}
+
+test "7z: a changed BCJ2 call stream fails its entry as corrupt" {
+    const gpa = std.testing.allocator;
+    // libarchive's copy_1: BCJ2 over stored streams, packed in the order
+    // main (24,220 bytes), call (1,132), jump, range. The call stream
+    // zeroed, the calls' targets decode wrong, the bytes after them read
+    // as other opcodes, and the code asks for more targets than there are.
+    const bytes = try gpa.dupe(u8, case("libarchive/7zip_bcj2_copy_1.7z"));
+    defer gpa.free(bytes);
+    @memset(bytes[32 + 24220 ..][0..1132], 0);
+    var archive = try hold.sevenz.Archive.open(gpa, .{ .memory = bytes }, .{});
+    defer archive.deinit();
+    var out: [32 * 1024]u8 = undefined;
+    try std.testing.expectError(error.CorruptStream, readAll(&archive, archive.entries()[0], &out));
+}

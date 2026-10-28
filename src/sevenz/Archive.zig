@@ -56,6 +56,8 @@ pub const coder = struct {
 
 /// The coders one folder may chain; 7-Zip writes at most four.
 const max_chain = 8;
+/// The packed streams one folder may read side by side: BCJ2's four.
+const max_packs = 4;
 /// Encoded headers inside encoded headers: 7-Zip writes one.
 const max_encodings = 4;
 
@@ -417,15 +419,16 @@ fn contentsOpenError(a: *Archive, e: Cursor.FolderError, item: Item) ContentsErr
     };
 }
 
-/// A folder's decoders, chained from its packed stream to its output,
-/// and the entry being read from it.
+/// A folder's decoders, from its packed streams to its output, and the
+/// entry being read from it. A coder's in-stream is another's output or a
+/// packed stream; each packed stream is read by a reader of its own, so
+/// BCJ2's four are read side by side.
 const Cursor = struct {
     folder: ?u32 = null,
     /// The next substream the output is at.
     next: u32 = 0,
-    view: Io.Reader = undefined,
-    pack: Bounded = undefined,
-    pack_buffer: [16 * 1024]u8 = undefined,
+    packs: [max_packs]Pack = undefined,
+    packs_len: u8 = 0,
     stages: [max_chain]Stage = undefined,
     len: u8 = 0,
     /// The folder's output: the last stage's checked reader.
@@ -435,18 +438,31 @@ const Cursor = struct {
     key: aegis.Secret([32]u8) = .init(@splat(0)),
     encrypted: bool = false,
 
+    const Pack = struct {
+        view: Source.View,
+        file_buffer: [4096]u8,
+        bounded: Bounded,
+        buffer: [16 * 1024]u8,
+    };
+
     const Stage = struct {
-        decoder: union(enum) { codec: codec.Decoder, aes: aes.Reader },
+        decoder: union(enum) { codec: codec.Decoder, aes: aes.Reader, bcj2: warp.Bcj2 },
         checked: Checked,
         buffer: [16 * 1024]u8,
+        /// BCJ2's own buffering.
+        staging: [4096]u8,
 
         fn reader(s: *Stage) *Io.Reader {
             return switch (s.decoder) {
                 .codec => |*d| d.reader(),
                 .aes => |*r| &r.interface,
+                .bcj2 => |*r| &r.interface,
             };
         }
     };
+
+    /// A stream a coder reads, and its length.
+    const Input = struct { reader: *Io.Reader, len: u64 };
 
     const FolderError = error{ Invalid, UnsupportedMethod, UnsupportedEncryption, PasswordRequired, LimitExceeded, ReadFailed, OutOfMemory };
 
@@ -457,34 +473,60 @@ const Cursor = struct {
         return c.failure(if (c.entry_open) &c.entry else null) == error.ReadFailed;
     }
 
-    /// The decoders of folder `index` of `s`, its packed stream at
+    /// The decoders of folder `index` of `s`, its packed streams at
     /// `starts`.
     fn open(c: *Cursor, a: *Archive, s: *const header.Streams, starts: []const u64, index: u32) FolderError!void {
         c.* = .{};
         const f = &s.folders[index];
-        var order: [max_chain]u32 = undefined;
-        const n = try chain(a, f, &order);
-        const at = starts[f.first_pack];
-        const input = a.source.readerAt(at, &c.view) catch return error.ReadFailed;
-        c.pack = .init(input, s.pack_sizes[f.first_pack], &c.pack_buffer);
-        var in: *Io.Reader = &c.pack.interface;
-        var in_len = s.pack_sizes[f.first_pack];
+        if (f.packed_ins.len > max_packs) return error.Invalid;
+        for (f.coders) |cd| if (cd.outs != 1 or (cd.ins != 1 and cd.id != coder.bcj2)) {
+            a.refused = cd.id;
+            return error.UnsupportedMethod;
+        };
+        for (f.coders) |cd| if (cd.id == coder.bcj2 and cd.ins != 4) return error.Invalid;
         errdefer c.close();
-        // From the packed stream's coder to the output's.
-        var i: usize = n;
-        while (i > 0) {
-            i -= 1;
-            const k = order[i];
-            const st = &c.stages[c.len];
-            try c.stage(a, st, f.coders[k], in, in_len, f.sizes[k]);
-            c.len += 1;
-            const expected = if (i == 0) f.crc else null;
-            st.checked = .init(st.reader(), f.sizes[k], expected, &st.buffer);
-            in = &st.checked.interface;
-            in_len = f.sizes[k];
-        }
-        c.out = in;
+        const main = f.mainOut();
+        const top = try c.output(a, s, starts, f, main, 0);
+        c.out = top.reader;
         c.folder = index;
+    }
+
+    /// Out-stream `o` of `f`: its coder's decoder over the streams it
+    /// reads, checked against its size (and the folder's CRC at its
+    /// output). Every coder has one out-stream, so `o` is its coder's.
+    fn output(c: *Cursor, a: *Archive, s: *const header.Streams, starts: []const u64, f: *const header.Folder, o: u32, depth: u8) FolderError!Input {
+        // A folder whose binds go round in a circle is not one.
+        if (depth == max_chain or o >= f.coders.len) return error.Invalid;
+        const cd = f.coders[o];
+        var first_in: u32 = 0;
+        for (f.coders[0..o]) |before| first_in += before.ins;
+        var ins: [4]Input = undefined;
+        for (ins[0..cd.ins], 0..) |*in, k| in.* = try c.input(a, s, starts, f, first_in + @as(u32, @intCast(k)), depth);
+        if (c.len == max_chain) return error.Invalid;
+        const st = &c.stages[c.len];
+        if (cd.id == coder.bcj2) {
+            st.decoder = .{ .bcj2 = .init(.{ .main = ins[0].reader, .call = ins[1].reader, .jump = ins[2].reader, .range = ins[3].reader }, &st.staging, f.sizes[o]) };
+        } else try c.stage(a, st, cd, ins[0].reader, ins[0].len, f.sizes[o]);
+        c.len += 1;
+        const expected = if (o == f.mainOut()) f.crc else null;
+        st.checked = .init(st.reader(), f.sizes[o], expected, &st.buffer);
+        return .{ .reader = &st.checked.interface, .len = f.sizes[o] };
+    }
+
+    /// In-stream `i` of `f`: the out-stream bound to it, or its packed
+    /// stream, read by a reader of its own.
+    fn input(c: *Cursor, a: *Archive, s: *const header.Streams, starts: []const u64, f: *const header.Folder, i: u32, depth: u8) FolderError!Input {
+        for (f.binds) |b| if (b.in == i) return c.output(a, s, starts, f, b.out, depth + 1);
+        const p = for (f.packed_ins, 0..) |in, p| {
+            if (in == i) break p;
+        } else return error.Invalid;
+        if (c.packs_len == max_packs) return error.Invalid;
+        const n = s.pack_sizes[f.first_pack + p];
+        const pack = &c.packs[c.packs_len];
+        const at = a.source.independentAt(starts[f.first_pack + p], &pack.view, &pack.file_buffer) catch return error.ReadFailed;
+        pack.bounded = .init(at, n, &pack.buffer);
+        c.packs_len += 1;
+        return .{ .reader = &pack.bounded.interface, .len = n };
     }
 
     /// Coder `cd` reading `in_len` bytes from `in`, giving `out_len`.
@@ -567,28 +609,6 @@ const Cursor = struct {
         return @as(u32, 2 | (byte & 1)) << @intCast(byte / 2 + 11);
     }
 
-    /// The folder's coders from its output to its packed stream: a line
-    /// of one-in, one-out coders, as every 7z writer but BCJ2 makes.
-    fn chain(a: *Archive, f: *const header.Folder, order: *[max_chain]u32) FolderError!usize {
-        if (f.packed_ins.len != 1) return error.UnsupportedMethod;
-        for (f.coders) |cd| if (cd.ins != 1 or cd.outs != 1) {
-            a.refused = cd.id;
-            return error.UnsupportedMethod;
-        };
-        // One in and one out each: a coder's streams share its index.
-        var k = f.mainOut();
-        var n: usize = 0;
-        while (true) {
-            if (n == max_chain or n == f.coders.len) return error.Invalid;
-            order[n] = k;
-            n += 1;
-            if (k == f.packed_ins[0]) return n;
-            k = for (f.binds) |b| {
-                if (b.in == k) break b.out;
-            } else return error.Invalid;
-        }
-    }
-
     /// Moves the output to substream `k` of `f`: the rest of the entry
     /// being read, then the substreams before `k`, discarded.
     fn skipTo(c: *Cursor, s: *const header.Streams, f: *const header.Folder, k: u32) Io.Reader.Error!void {
@@ -602,13 +622,15 @@ const Cursor = struct {
     /// What failed behind a `ReadFailed` of `top`, a reader over `out`;
     /// `ReadFailed` when nothing of the folder did.
     fn failure(c: *const Cursor, top: ?*const Checked) Failure {
-        if (c.pack.failure) |e| return e;
+        for (c.packs[0..c.packs_len]) |*p| if (p.bounded.failure) |e| return e;
         var i: usize = 0;
         while (i < c.len) : (i += 1) {
             const st = &c.stages[i];
             const own: ?Error = switch (st.decoder) {
                 .aes => |*r| r.err(),
                 .codec => |*d| if (d.failed()) @as(Error, error.CorruptStream) else null,
+                // A call, jump or range stream short of what the code asks.
+                .bcj2 => |*r| if (r.err() != null) @as(Error, error.CorruptStream) else null,
             };
             const bad: ?Error = if (own) |o| o else if (st.checked.failure) |f| f else null;
             if (bad) |e| return if (c.encrypted) error.WrongPassword else e;
@@ -622,8 +644,10 @@ const Cursor = struct {
         while (i < c.len) : (i += 1) switch (c.stages[i].decoder) {
             .codec => |*d| d.deinit(),
             .aes => |*r| r.deinit(),
+            .bcj2 => {},
         };
         c.len = 0;
+        c.packs_len = 0;
         c.folder = null;
         c.key.deinit();
     }
