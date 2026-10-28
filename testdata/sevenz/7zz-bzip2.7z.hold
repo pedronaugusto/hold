@@ -1,7 +1,0 @@
-# bzip2 (coder 040202), which warp has no decoder for yet (warp-dense, decode only); hold refuses each entry by name. The lines become libarchive's when warp has it.
-directory 0 755 1577934245 cbf29ce484222325 dir/	
-error UnsupportedMethod
-error UnsupportedMethod
-error UnsupportedMethod
-error UnsupportedMethod
-error UnsupportedMethod

@@ -1,6 +1,6 @@
-# Names without the UTF-8 flag are code page 437; libarchive decodes them, hold hands back the bytes (Entry.encoding = .cp437) until xenoglyph decodes CP437 (Tycho, 2026-10-25). The fourth name is taken from its Unicode Path field, whose CRC matches the central name (APPNOTE 4.6.9); libarchive takes the local name.
+# The fourth name is taken from its Unicode Path field, whose CRC matches the central name (APPNOTE 4.6.9); libarchive takes the local name.
 # 7-Zip and Windows writers store the exact NTFS time; libarchive reads the two-second DOS time beside it (and as local time), hold the NTFS time.
 file 9 664 1415256843 b369abcffaa6a4f1 File 1.txt	
-file 9 664 1415256843 b369abcffaa6a4f1 File 2 - �.txt	
-file 9 664 1415256843 b369abcffaa6a4f1 File 3 - �.txt	
+file 9 664 1415256843 b369abcffaa6a4f1 File 2 - ö.txt	
+file 9 664 1415256843 b369abcffaa6a4f1 File 3 - ä.txt	
 file 9 664 1415256843 b369abcffaa6a4f1 File 4 - å.txt	

@@ -164,7 +164,7 @@ fn openContents(s: *Stream, r: *const Record, descriptor: bool, zip64: bool) Nex
         c.bounded = .init(s.input, r.compressed, &c.bounded_buffer);
         source = &c.bounded.interface;
     }
-    c.decoder.init(s.gpa, r.method, source, .{ .limits = s.options.limits, .self_terminated = descriptor }) catch |e| return switch (e) {
+    c.decoder.init(s.gpa, .{ .method = r.method }, source, .{ .limits = s.options.limits, .self_terminated = descriptor, .size = if (descriptor) null else r.entry.size }) catch |e| return switch (e) {
         error.UnsupportedMethod => blk: {
             if (s.options.diagnostic) |d| d.* = .{ .entry = s.entries, .reason = .unsupported_method, .method = @backingInt(r.method) };
             break :blk error.Unsupported;

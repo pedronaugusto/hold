@@ -1,2 +1,3 @@
-# 7-Zip and bsdtar encode the header with LZMA (coder 030101), which warp has no decoder for yet (warp-dense, after Brotli and bzip2): hold refuses the archive by name at open. The lines become libarchive's when warp has LZMA.
-error UnsupportedMethod
+# libarchive reads no 7z AES ("currently not supported"); hold decrypts it with the password libarchive's tests use, `password`.
+file 4 664 1379079541 dd1276790c25c367 bar_unencrypted.txt	
+file 4 664 1379079565 dd1276790c25c367 bar_encrypted.txt	

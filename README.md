@@ -8,8 +8,7 @@ whole archive or a whole entry. Compression comes from
 through [airlock](https://github.com/pedronaugusto/airlock), with the
 hostile-input rules on by default.
 
-Work in progress: tar, zip, 7z reading and extraction are built; most 7z
-archives wait on warp's LZMA (7-Zip encodes the header with it).
+Work in progress: tar, zip, 7z reading and extraction are built.
 
 ## Install
 
@@ -61,12 +60,16 @@ hostile-input rules.
   and NTFS times; entries whose data overlap are refused. WinZip AES (128-
   and 256-bit) is read; ZipCrypto, PKWARE's strong encryption and AES-192 are
   refused by name, and nothing is written encrypted. Methods: stored,
-  DEFLATE and zstd today, the others as warp gains them (bzip2 read only).
+  DEFLATE and zstd both ways; Deflate64, bzip2 and LZMA read. xz and PPMd
+  are refused by name. A name without the UTF-8 flag is UTF-8 when it is
+  well formed, code page 437 decoded when an MS-DOS host wrote it, and its
+  bytes otherwise.
 - **7z**: read: encoded headers, solid folders of chained coders, empty
   streams and files, anti items, times and attributes, CRCs; 7z AES read
-  with a password. Coders: copy, DEFLATE and zstd today; LZMA, LZMA2,
-  bzip2, Deflate64 and the BCJ and Delta filters as warp gains them. PPMd,
-  BCJ2 and self-extracting archives are refused.
+  with a password. Coders: copy, LZMA, LZMA2, DEFLATE, Deflate64, bzip2,
+  zstd, Delta and the BCJ filters (x86, PowerPC, IA-64, ARM, ARM Thumb,
+  SPARC, ARM64, RISC-V). PPMd, BCJ2 and self-extracting archives are
+  refused.
 - **Extraction**: `hold.extract` writes any of them into a directory with
   the hostile-input rules on: names checked, no write through a link,
   links last and only inside, specials refused, permissions as Python's

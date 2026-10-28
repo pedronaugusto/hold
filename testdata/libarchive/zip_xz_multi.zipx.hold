@@ -1,4 +1,4 @@
-# warp has no decoder for this method yet (bzip2, LZMA, xz); hold refuses it by name, entry by entry. The line becomes libarchive's when warp has it.
+# xz (method 95) is refused by name for now: warp's xz reader takes its window before the block header that names the dictionary is read, and a zip entry's xz is not sized up front yet.
 error UnsupportedMethod
 error UnsupportedMethod
 error UnsupportedMethod

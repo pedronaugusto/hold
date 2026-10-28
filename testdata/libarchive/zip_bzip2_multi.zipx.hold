@@ -1,4 +1,4 @@
-# warp has no decoder for this method yet (bzip2, LZMA, xz); hold refuses it by name, entry by entry. The line becomes libarchive's when warp has it.
-error UnsupportedMethod
-error UnsupportedMethod
-error UnsupportedMethod
+# 7-Zip and Windows writers store the exact NTFS time; libarchive reads the two-second DOS time beside it (and as local time), hold the NTFS time.
+file 6699 644 1545026673 fdbb5a30fd30ac0e smartd.conf	
+file 852 644 1545026656 eda2a199f95af738 ts.conf	
+file 912 644 1545023398 d6bf2e3fd19ff4c0 vimrc	

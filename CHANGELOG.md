@@ -6,11 +6,33 @@ follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Breaking
+
+- `Entry.Encoding` has no `cp437`: a zip name an MS-DOS host wrote in code
+  page 437 comes decoded to UTF-8 (through xenoglyph), as libarchive gives
+  it; `zip.Record.raw_name` keeps the bytes and `zip.Record.cp437` says the
+  name was decoded. A name without the UTF-8 flag that is well-formed UTF-8
+  is UTF-8, and another host's name that is not is `.unspecified` bytes.
+- `zip.Record.made_by` is null for a record read forward, where a local
+  header names no host.
+
+### Added
+
+- 7z coders LZMA (030101), LZMA2 (21), bzip2 (040202), Delta (03) and the
+  branch converters for x86, PowerPC, IA-64, ARM, ARM Thumb, SPARC, ARM64
+  and RISC-V, through warp's LZMA, bzip2 and xz filter readers: 7-Zip's
+  and bsdtar's archives, whose headers are LZMA, now read as libarchive
+  reads them. An LZMA window is no larger than the contents it decodes.
+- zip methods 12 (bzip2) and 14 (LZMA, its properties leading the stream).
+
 ### Changed
 
 - Pins aegis 0.2.3, the 0.2 line, airlock 0.6.0 and xenoglyph 0.5.1, and
   warp at its 0.5.0 car until the tag; developed with shakedown 0.6.0 and
   preflight 0.18.5.
+- A zstd stream is decoded frame by frame, each over the window its own
+  header names: 7-Zip's zstd folders start with an empty frame of a small
+  window, and their data frame's larger one was refused.
 - A malformed pax sparse map (GNU 0.0) and a zip whose extra fields break
   are refused where they are read, with the diagnostic's `sparse_map` or
   `extra_field`; the fields a local header holds are found in the one pass
