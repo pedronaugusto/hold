@@ -14,6 +14,7 @@ const Io = std.Io;
 const header = @import("header.zig");
 const pax = @import("pax.zig");
 const Entry = @import("../Entry.zig");
+const text = @import("../text.zig");
 
 pub const Format = enum { ustar, pax, gnu };
 
@@ -223,7 +224,7 @@ const Draft = struct {
     /// uname and gname, in records when they do not fit or are not ASCII.
     fn owners(d: *Draft, e: Entry) BeginError!void {
         inline for (.{ .{ header.uname, "uname", e.uname }, .{ header.gname, "gname", e.gname } }) |o| {
-            if (o[2].len <= o[0].len and (d.format != .pax or isAscii(o[2]))) {
+            if (o[2].len <= o[0].len and (d.format != .pax or text.isAscii(o[2]))) {
                 @memcpy(d.b[o[0].start..][0..o[2].len], o[2]);
             } else switch (d.format) {
                 .pax => {
@@ -241,7 +242,7 @@ const Draft = struct {
 /// the entry's.
 fn draftNames(w: *Writer, d: *Draft, h: Header) BeginError!void {
     const e = h.entry;
-    const name_text = d.format != .pax or isAscii(e.name);
+    const name_text = d.format != .pax or text.isAscii(e.name);
     const split = if (e.name.len <= header.name.len) null else splitPrefix(e.name, w.options.ustar_prefix);
     if (e.name.len <= header.name.len and name_text) {
         @memcpy(d.b[0..e.name.len], e.name);
@@ -260,7 +261,7 @@ fn draftNames(w: *Writer, d: *Draft, h: Header) BeginError!void {
             putTruncated(header.name.slot(&d.b), h.ustar_name orelse e.name);
         },
     }
-    if (e.link.len <= header.linkname.len and (d.format != .pax or isAscii(e.link))) {
+    if (e.link.len <= header.linkname.len and (d.format != .pax or text.isAscii(e.link))) {
         @memcpy(d.b[header.linkname.start..][0..e.link.len], e.link);
     } else switch (d.format) {
         .ustar => return error.Unrepresentable,
@@ -335,11 +336,6 @@ fn defaultMode(kind: Entry.Kind) u32 {
         .symlink => 0o777,
         else => 0o644,
     };
-}
-
-fn isAscii(s: []const u8) bool {
-    for (s) |c| if (c >= 0x80) return false;
-    return true;
 }
 
 fn putTruncated(field: []u8, s: []const u8) void {
@@ -432,16 +428,16 @@ fn defaultPaxName(name: []const u8, buffer: *[header.name.len]u8) []const u8 {
 }
 
 /// GNU's `././@LongLink` header and the name or link it carries.
-fn longHeader(w: *Writer, flag: u8, text: []const u8, h: Header) BeginError!void {
+fn longHeader(w: *Writer, flag: u8, long: []const u8, h: Header) BeginError!void {
     var b = std.mem.zeroes(header.Block);
     try w.paxBlock(&b, flag, "././@LongLink", 0o644, h);
     @memcpy(b[257..265], "ustar  \x00");
-    const len = text.len + 1;
+    const len = long.len + 1;
     if (!header.fitsOctal(12, len)) return error.Unrepresentable;
     header.putOctal(header.size.slot(&b), len);
     header.putChecksum(&b, w.options.checksum);
     try w.raw(&b);
-    try w.raw(text);
+    try w.raw(long);
     try w.zeros(1 + padding(len));
 }
 

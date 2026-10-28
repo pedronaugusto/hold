@@ -21,6 +21,7 @@ const Diagnostic = @import("../Diagnostic.zig");
 const Bounded = @import("../Bounded.zig");
 const Checked = @import("../Checked.zig");
 const Entry = @import("../Entry.zig");
+const text = @import("../text.zig");
 
 /// Where the archive's bytes are.
 pub const Source = @import("../source.zig").Source;
@@ -48,6 +49,10 @@ comment_buffer: []u8,
 /// Bytes before the archive proper (a self-extractor's program), which
 /// every offset the archive records is counted from.
 base: u64,
+/// Private: the names in code page 437, in the directory's order, as
+/// UTF-8 one after another, and where each ends.
+cp437_text: []u8 = &.{},
+cp437_ends: []usize = &.{},
 
 pub const OpenError = error{
     /// No end record, or a record or field that breaks the format.
@@ -98,6 +103,8 @@ pub fn deinit(a: *Archive) void {
     a.gpa.free(a.directory);
     a.gpa.free(a.bounds);
     a.gpa.free(a.comment_buffer);
+    a.gpa.free(a.cp437_text);
+    a.gpa.free(a.cp437_ends);
     a.* = undefined;
 }
 
@@ -123,11 +130,21 @@ pub fn iterate(a: *const Archive) Iterator {
 pub const Iterator = struct {
     archive: *const Archive,
     at: usize = 0,
+    /// The code page 437 names given so far.
+    cp437: usize = 0,
 
     /// The next record; every record was checked by `open`.
     pub fn next(it: *Iterator) ?Record {
-        if (it.at == it.archive.directory.len) return null;
-        return parseRecord(it.archive.directory, &it.at, it.archive.base) catch unreachable; // aegis: no-danger: open parsed every record of this directory, whose bytes the archive owns and nothing changes
+        const a = it.archive;
+        if (it.at == a.directory.len) return null;
+        var r = parseRecord(a.directory, &it.at, a.base) catch unreachable; // aegis: no-danger: open parsed every record of this directory, whose bytes the archive owns and nothing changes
+        if (r.cp437) {
+            // `open` decoded them in this order.
+            const start = if (it.cp437 == 0) 0 else a.cp437_ends[it.cp437 - 1];
+            r.entry.name = a.cp437_text[start..a.cp437_ends[it.cp437]];
+            it.cp437 += 1;
+        }
+        return r;
     }
 };
 
@@ -226,7 +243,7 @@ pub fn contents(a: *Archive, c: *Contents, record: Record, buffer: []u8, options
         plain = &c.decrypt.?.interface;
     }
     errdefer if (c.decrypt) |*d| d.deinit();
-    c.decoder.init(a.gpa, record.method, plain, .{ .limits = a.options.limits }) catch |e| return switch (e) {
+    c.decoder.init(a.gpa, .{ .method = record.method }, plain, .{ .limits = a.options.limits, .size = record.entry.size }) catch |e| return switch (e) {
         error.UnsupportedMethod => blk: {
             if (a.options.diagnostic) |d| d.* = .{ .offset = record.offset, .reason = .unsupported_method, .method = @backingInt(record.method) };
             break :blk error.UnsupportedMethod;
@@ -420,6 +437,10 @@ fn check(a: *Archive, end: End, dir_start: u64) OpenError!void {
     try offsets.ensureTotalCapacity(a.gpa, @intCast(end.entries));
     var lows: std.ArrayList(Low) = .empty;
     defer lows.deinit(a.gpa);
+    var names: std.ArrayList(u8) = .empty;
+    defer names.deinit(a.gpa);
+    var ends: std.ArrayList(usize) = .empty;
+    defer ends.deinit(a.gpa);
     try lows.ensureTotalCapacity(a.gpa, @intCast(end.entries));
     while (at < a.directory.len) {
         const record_at = dir_start + at;
@@ -431,6 +452,10 @@ fn check(a: *Archive, end: End, dir_start: u64) OpenError!void {
         // The least an entry occupies: its local header with the name its
         // record gives, and its stored bytes.
         try lows.append(a.gpa, .{ .offset = r.offset, .end = r.offset +| format.local_len +| r.raw_name.len +| r.compressed });
+        if (r.cp437) {
+            try text.appendCp437(a.gpa, &names, r.raw_name);
+            try ends.append(a.gpa, names.items.len);
+        }
     }
     // A count past 65,535 wraps in a writer that knows no ZIP64.
     if (count != end.entries and !(end.entries < 0xffff and count % 0x10000 == end.entries))
@@ -444,6 +469,8 @@ fn check(a: *Archive, end: End, dir_start: u64) OpenError!void {
     std.mem.sortUnstable(u64, offsets.items, {}, std.sort.asc(u64));
     try offsets.append(a.gpa, dir_start);
     a.bounds = try offsets.toOwnedSlice(a.gpa);
+    a.cp437_text = try names.toOwnedSlice(a.gpa);
+    a.cp437_ends = try ends.toOwnedSlice(a.gpa);
 }
 
 const Low = struct {

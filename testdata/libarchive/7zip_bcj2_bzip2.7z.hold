@@ -1,2 +1,2 @@
-# 7-Zip and bsdtar encode the header with LZMA (coder 030101), which warp has no decoder for yet (warp-dense, after Brotli and bzip2): hold refuses the archive by name at open. The lines become libarchive's when warp has LZMA.
+# BCJ2 (coder 0303011b) splits x86 code into four streams; hold reads folders of one-in, one-out coders and refuses BCJ2 by name, as it refuses any coder of several streams.
 error UnsupportedMethod

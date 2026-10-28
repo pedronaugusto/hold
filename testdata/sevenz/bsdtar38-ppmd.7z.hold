@@ -1,2 +1,8 @@
-# 7-Zip and bsdtar encode the header with LZMA (coder 030101), which warp has no decoder for yet (warp-dense, after Brotli and bzip2): hold refuses the archive by name at open. The lines become libarchive's when warp has LZMA.
+# PPMd is refused by name: no rival but libarchive and 7-Zip reads it, and warp has no PPMd (design §0).
 error UnsupportedMethod
+error UnsupportedMethod
+error UnsupportedMethod
+error UnsupportedMethod
+error UnsupportedMethod
+error UnsupportedMethod
+directory 0 755 1577934245 cbf29ce484222325 dir/	

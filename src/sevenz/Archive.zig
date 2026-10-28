@@ -9,6 +9,7 @@ const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const aegis = @import("aegis");
+const warp = @import("warp");
 const header = @import("header.zig");
 const aes = @import("aes.zig");
 const codec = @import("../codec.zig");
@@ -36,6 +37,13 @@ pub const coder = struct {
     pub const lzma2 = 0x21;
     pub const lzma = 0x030101;
     pub const x86 = 0x03030103;
+    pub const powerpc = 0x03030205;
+    pub const ia64 = 0x03030401;
+    pub const arm = 0x03030501;
+    pub const armthumb = 0x03030701;
+    pub const sparc = 0x03030805;
+    pub const arm64 = 0x0a;
+    pub const riscv = 0x0b;
     pub const bcj2 = 0x0303011b;
     pub const ppmd = 0x030401;
     pub const deflate = 0x040108;
@@ -121,7 +129,7 @@ pub fn open(gpa: Allocator, source: Source, options: Options) OpenError!Archive 
     if (Limits.over(options.limits.directory, start.len)) return a.fail(at, .directory_limit, error.LimitExceeded);
     const bytes = try a.arena.allocator().alloc(u8, @intCast(start.len));
     try source.readAt(at, bytes);
-    if (@import("warp").crc32(0, bytes) != start.crc) return a.fail(at, .checksum, error.Corrupt);
+    if (warp.crc32(0, bytes) != start.crc) return a.fail(at, .checksum, error.Corrupt);
     const h = try a.parse(bytes, at);
     a.streams = h.streams;
     a.pack_starts = try a.packStarts(&a.streams, at);
@@ -481,28 +489,21 @@ const Cursor = struct {
 
     /// Coder `cd` reading `in_len` bytes from `in`, giving `out_len`.
     fn stage(c: *Cursor, a: *Archive, st: *Stage, cd: header.Coder, in: *Io.Reader, in_len: u64, out_len: u64) FolderError!void {
-        const method: codec.Method = switch (cd.id) {
-            coder.copy => .stored,
-            coder.deflate => .deflate,
-            coder.deflate64 => .deflate64,
-            coder.bzip2 => .bzip2,
-            coder.zstd => .zstd,
-            coder.aes256 => {
-                const password = a.options.password orelse return error.PasswordRequired;
-                const props = try aes.parseProps(cd.props);
-                try aes.deriveKey(props, password, &c.key);
-                c.encrypted = true;
-                st.decoder = .{ .aes = undefined };
-                st.decoder.aes.init(in, in_len, out_len, props, &c.key) catch return error.Invalid;
-                return;
-            },
-            else => {
-                a.refused = cd.id;
-                return error.UnsupportedMethod;
-            },
+        if (cd.id == coder.aes256) {
+            const password = a.options.password orelse return error.PasswordRequired;
+            const props = try aes.parseProps(cd.props);
+            try aes.deriveKey(props, password, &c.key);
+            c.encrypted = true;
+            st.decoder = .{ .aes = undefined };
+            st.decoder.aes.init(in, in_len, out_len, props, &c.key) catch return error.Invalid;
+            return;
+        }
+        const decoded = codecOf(cd) catch |e| {
+            if (e == error.UnsupportedMethod) a.refused = cd.id;
+            return e;
         };
         st.decoder = .{ .codec = undefined };
-        st.decoder.codec.init(a.gpa, method, in, .{ .limits = a.options.limits }) catch |e| return switch (e) {
+        st.decoder.codec.init(a.gpa, decoded, in, .{ .limits = a.options.limits, .size = out_len }) catch |e| return switch (e) {
             error.UnsupportedMethod => {
                 a.refused = cd.id;
                 return error.UnsupportedMethod;
@@ -512,6 +513,58 @@ const Cursor = struct {
             error.ReadFailed => error.ReadFailed,
             error.OutOfMemory => error.OutOfMemory,
         };
+    }
+
+    /// The decoder of coder `cd`, from its id and properties as 7-Zip
+    /// writes them.
+    fn codecOf(cd: header.Coder) error{ Invalid, UnsupportedMethod }!codec.Coder {
+        const bcj: warp.xz.Bcj = switch (cd.id) {
+            coder.copy => return .{ .method = .stored },
+            coder.deflate => return .{ .method = .deflate },
+            coder.deflate64 => return .{ .method = .deflate64 },
+            coder.bzip2 => return .{ .method = .bzip2 },
+            coder.zstd => return .{ .method = .zstd },
+            coder.lzma => {
+                // lc, lp and pb in a byte, then the dictionary.
+                if (cd.props.len < 5) return error.Invalid;
+                const properties = warp.lzma.Properties.parse(cd.props[0]) orelse return error.Invalid;
+                return .{ .lzma = .{ .properties = properties, .dictionary = std.mem.readInt(u32, cd.props[1..5], .little) } };
+            },
+            coder.lzma2 => {
+                if (cd.props.len != 1) return error.Invalid;
+                return .{ .lzma2 = .{ .dictionary = lzma2Dictionary(cd.props[0]) orelse return error.Invalid } };
+            },
+            coder.delta => {
+                // The distance less one.
+                if (cd.props.len != 1) return error.Invalid;
+                return .{ .filter = .{ .delta = @as(u16, cd.props[0]) + 1 } };
+            },
+            coder.x86 => .x86,
+            coder.powerpc => .powerpc,
+            coder.ia64 => .ia64,
+            coder.arm => .arm,
+            coder.armthumb => .armthumb,
+            coder.sparc => .sparc,
+            coder.arm64 => .arm64,
+            coder.riscv => .riscv,
+            else => return error.UnsupportedMethod,
+        };
+        // A branch converter: no properties, or where it starts.
+        const start: u32 = switch (cd.props.len) {
+            0 => 0,
+            4 => std.mem.readInt(u32, cd.props[0..4], .little),
+            else => return error.Invalid,
+        };
+        if (start % bcj.alignment() != 0) return error.Invalid;
+        return .{ .filter = .{ .bcj = .{ .kind = bcj, .start = start } } };
+    }
+
+    /// The dictionary an LZMA2 properties byte names: 2 or 3 times a power
+    /// of two from 4 KiB, 40 for 4 GiB less one; null past 40.
+    fn lzma2Dictionary(byte: u8) ?u32 {
+        if (byte > 40) return null;
+        if (byte == 40) return std.math.maxInt(u32);
+        return @as(u32, 2 | (byte & 1)) << @intCast(byte / 2 + 11);
     }
 
     /// The folder's coders from its output to its packed stream: a line

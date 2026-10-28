@@ -1,3 +1,0 @@
-# The header is plain; both entries are LZMA2 (coder 21), which warp has no decoder for yet (warp-dense). The lines become libarchive's when warp has it.
-error UnsupportedMethod
-error UnsupportedMethod

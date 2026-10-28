@@ -20,8 +20,8 @@
         },
 
         .warp = .{
-            .url = "git+https://github.com/pedronaugusto/warp?ref=car-0.5.0#eb7863b470d69600aa51d71e7f0b390f80f25892",
-            .hash = "warp-0.4.5-JASxFUivLAD-yD_aEbiOg3X0S8vk9jgnn_WeJSD1tR9c",
+            .url = "git+https://github.com/pedronaugusto/warp?ref=car-0.5.0#ca6756cdfef241c62f6baed79c922657a4e97f6e",
+            .hash = "warp-0.4.5-JASxFVL6LADavXZ0qwgF6T80OhGG6w0zNM0tcyegpnNq",
         },
 
         .airlock = .{

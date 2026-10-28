@@ -32,11 +32,10 @@ in its `# ` lines, why.
   3.8 (`bsdtar38-*`, every 7z compression it writes).
 - `libarchive/7zip_*`: the 7z archives of libarchive 3.8.1's test suite;
   its three self-extractors are left out (hold reads no self-extractor).
-  Nearly all encode their header with LZMA and wait on warp.
 
 Names are compared in NFC: libarchive's macOS build hands names out in NFD.
-A `.hold` file's reasons name each divergence; most are methods warp has no
-decoder for yet, and become libarchive's lines when warp has them.
+A `.hold` file's reasons name each divergence: a time read from another field,
+a method refused by name, an encryption libarchive does not read.
 
 `testdata.zig` indexes the corpus for the tests: `bay testdata-index`
 (`tools/index.zig`) writes it again after an archive or a `.hold` file comes

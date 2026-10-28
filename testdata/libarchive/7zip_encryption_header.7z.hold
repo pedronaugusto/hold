@@ -1,0 +1,2 @@
+# libarchive reads no 7z AES ("currently not supported"); hold decrypts it with the password libarchive's tests use, `password`.
+file 4 664 1379073956 dd1276790c25c367 bar.txt	

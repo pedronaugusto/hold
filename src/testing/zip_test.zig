@@ -11,6 +11,44 @@ fn readAll(gpa: std.mem.Allocator, archive: *hold.zip.Archive, record: hold.zip.
     return out.toOwnedSlice();
 }
 
+test "a name without the UTF-8 flag: an MS-DOS host's code page 437 decoded, another host's bytes kept" {
+    const gpa = std.testing.allocator;
+    var out: std.Io.Writer.Allocating = .init(gpa);
+    defer out.deinit();
+    var zw: hold.zip.Writer = .init(gpa, &out.writer, .{});
+    defer zw.deinit();
+    const t: std.Io.Timestamp = hold.Entry.seconds(1_600_000_000);
+    // "Grüße" in code page 437, from MS-DOS and from Unix (a KOI8-R name
+    // there would be the same bytes), and UTF-8 with no flag.
+    try zw.add(.{ .entry = .{ .name = "Gr\x81\xe1e.txt", .mtime = t }, .made_by = 0x0014, .utf8 = false }, "dos");
+    try zw.add(.{ .entry = .{ .name = "Gr\x81\xe1e.txt", .mtime = t }, .made_by = 0x031e, .utf8 = false }, "unix");
+    try zw.add(.{ .entry = .{ .name = "Gr\u{fc}\u{df}e.txt", .mtime = t }, .made_by = 0x0014, .utf8 = false }, "utf8");
+    try zw.finish("");
+
+    var archive = try hold.zip.Archive.open(gpa, .{ .memory = out.written() }, .{});
+    defer archive.deinit();
+    var it = archive.iterate();
+    const dos = it.next().?;
+    try std.testing.expectEqualStrings("Gr\u{fc}\u{df}e.txt", dos.entry.name);
+    try std.testing.expectEqual(hold.Entry.Encoding.utf8, dos.entry.encoding);
+    try std.testing.expectEqualStrings("Gr\x81\xe1e.txt", dos.raw_name);
+    const unix = it.next().?;
+    try std.testing.expectEqualStrings("Gr\x81\xe1e.txt", unix.entry.name);
+    try std.testing.expectEqual(hold.Entry.Encoding.unspecified, unix.entry.encoding);
+    const utf8 = it.next().?;
+    try std.testing.expectEqualStrings("Gr\u{fc}\u{df}e.txt", utf8.entry.name);
+    try std.testing.expectEqual(hold.Entry.Encoding.utf8, utf8.entry.encoding);
+    try std.testing.expect(archive.find("Gr\u{fc}\u{df}e.txt") != null);
+
+    // Read forward, no record names a host: the bytes are kept.
+    var in: std.Io.Reader = .fixed(out.written());
+    var st: hold.zip.Stream = .init(gpa, &in, &.{}, .{});
+    defer st.deinit();
+    const first = (try st.next()).?;
+    try std.testing.expectEqualStrings("Gr\x81\xe1e.txt", first.entry.name);
+    try std.testing.expectEqual(hold.Entry.Encoding.unspecified, first.entry.encoding);
+}
+
 test "a zip round-trips through every method warp has, streamed and in memory" {
     const gpa = std.testing.allocator;
     var out: std.Io.Writer.Allocating = .init(gpa);

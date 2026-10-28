@@ -21,16 +21,14 @@ pub const Kind = enum {
 
 /// How the bytes of `name` and `link` are to be read as text.
 pub const Encoding = enum {
-    /// UTF-8, as the format says: a pax header's names, a zip entry with
-    /// its UTF-8 flag or a matching Unicode path field, a 7z name (decoded
-    /// from UTF-16LE).
+    /// UTF-8, as the format says: a pax header's names, a zip name (with
+    /// its UTF-8 flag, or well formed, or an MS-DOS host's code page 437
+    /// decoded) or a 7z name (decoded from UTF-16LE).
     utf8,
-    /// Code page 437, as a zip names an entry without its UTF-8 flag
-    /// (APPNOTE 4.4.4). ASCII names are reported as `utf8`.
-    cp437,
-    /// Bytes the format gives no encoding for: a ustar, GNU or v7 name, or
-    /// a pax name under `hdrcharset=BINARY`. By convention the creator's
-    /// locale, and UTF-8 nearly everywhere.
+    /// Bytes the format gives no encoding for: a ustar, GNU or v7 name, a
+    /// pax name under `hdrcharset=BINARY`, a zip name from another host
+    /// that is not UTF-8. By convention the creator's locale, and UTF-8
+    /// nearly everywhere.
     unspecified,
 };
 

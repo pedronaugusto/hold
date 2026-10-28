@@ -14,12 +14,27 @@ pub const Method = enum(u16) {
     deflate = 8,
     deflate64 = 9,
     bzip2 = 12,
+    /// LZMA, its properties leading the stream (APPNOTE 5.8.8).
     lzma = 14,
     zstd = 93,
     xz = 95,
+    ppmd = 98,
     /// WinZip AES: the real method is in the entry's 0x9901 field.
     aes = 99,
     _,
+};
+
+/// What a decoder decodes: a zip method, whose stream carries what it
+/// needs, or one of 7z's coders whose properties are kept apart from the
+/// stream.
+pub const Coder = union(enum) {
+    method: Method,
+    /// Raw LZMA.
+    lzma: struct { properties: warp.lzma.Properties, dictionary: u32 },
+    /// Raw LZMA2.
+    lzma2: struct { dictionary: u32 },
+    /// Delta or a branch converter, as xz has them.
+    filter: warp.xz.Filter,
 };
 
 pub const DecodeError = error{
@@ -39,30 +54,50 @@ pub const Decoder = struct {
     gpa: Allocator,
     state: State,
     /// The window and buffer the decoder reads into.
-    buffer: []u8 = &.{},
+    buffer: []align(4) u8 = &.{},
 
     const State = union(enum) {
         stored: *Io.Reader,
         deflate: warp.Inflate.Reader,
-        zstd: warp.zstd.Decompress.Reader,
+        zstd: Zstd,
+        lzma: warp.lzma.Decompress.Reader,
+        bzip2: warp.bzip2.Decompress.Reader,
+        filter: warp.xz.FilterReader,
     };
+
+    /// The reader's own buffering, before a codec's window.
+    const read_len = 4096;
 
     pub const Options = struct {
         limits: Limits = .{},
         /// The stream ends at its codec's own end and what follows is not
-        /// its (an entry with a data descriptor): one zstd frame, not all
-        /// the frames until the input ends.
+        /// its (an entry with a data descriptor): one zstd frame or bzip2
+        /// stream, not all of them until the input ends.
         self_terminated: bool = false,
+        /// The decoded length where the archive declares it: an LZMA
+        /// stream ends there, with or without its end marker, and keeps no
+        /// more history than it.
+        size: ?u64 = null,
     };
 
-    pub fn init(d: *Decoder, gpa: Allocator, method: Method, input: *Io.Reader, options: Options) DecodeError!void {
+    pub fn init(d: *Decoder, gpa: Allocator, coder: Coder, input: *Io.Reader, options: Options) DecodeError!void {
         const limits = options.limits;
         d.* = .{ .gpa = gpa, .state = .{ .stored = input } };
+        const method = switch (coder) {
+            .method => |m| m,
+            .lzma => |l| return d.initLzma(input, l.properties, l.dictionary, options),
+            .lzma2 => |l| return d.initLzma(input, null, l.dictionary, options),
+            .filter => |f| {
+                d.buffer = try gpa.alignedAlloc(u8, .@"4", read_len);
+                d.state = .{ .filter = .init(input, d.buffer, f) };
+                return;
+            },
+        };
         switch (method) {
             .stored => {},
             .deflate => {
                 const inflate: warp.Inflate.Options = .{ .accept = .raw, .window_bits = 15 };
-                d.buffer = try gpa.alloc(u8, (1 << 15) + 4096);
+                d.buffer = try gpa.alignedAlloc(u8, .@"4", (1 << 15) + read_len);
                 d.state = .{ .deflate = .init(input, d.buffer, inflate) };
             },
             .deflate64 => {
@@ -70,37 +105,53 @@ pub const Decoder = struct {
                 // the extended alphabet and a 64 KiB window.
                 const inflate: warp.Inflate.Options = .{ .accept = .raw, .format = .deflate64 };
                 if (Limits.over(limits.window, inflate.windowLen())) return error.LimitExceeded;
-                d.buffer = try gpa.alloc(u8, inflate.windowLen() + 4096);
+                d.buffer = try gpa.alignedAlloc(u8, .@"4", inflate.windowLen() + read_len);
                 d.state = .{ .deflate = .init(input, d.buffer, inflate) };
             },
+            .bzip2 => {
+                // The block's vector, the most a level-9 stream needs: bzip2
+                // keeps no history beyond its block.
+                d.buffer = try gpa.alignedAlloc(u8, .@"4", read_len + warp.bzip2.Decompress.memory);
+                d.state = .{ .bzip2 = .init(input, d.buffer, .{ .streams = if (options.self_terminated) .one else .all }) };
+            },
+            .lzma => {
+                // Zip's LZMA: LZMA SDK's version (two bytes), the
+                // properties' length, then the five bytes of raw LZMA's
+                // properties.
+                const head = input.takeArray(9) catch |e| return switch (e) {
+                    error.EndOfStream => error.Invalid,
+                    error.ReadFailed => error.ReadFailed,
+                };
+                if (std.mem.readInt(u16, head[2..4], .little) != 5) return error.Invalid;
+                const properties = warp.lzma.Properties.parse(head[4]) orelse return error.Invalid;
+                const dictionary = std.mem.readInt(u32, head[5..9], .little);
+                return d.initLzma(input, properties, dictionary, options);
+            },
             .zstd => {
-                // The frame's own header names its window: the buffer is
-                // sized by it, after it is checked against the limit.
-                const head = input.peek(18) catch |e| switch (e) {
-                    // A stream shorter than the longest frame header.
-                    error.EndOfStream => input.peekGreedy(1) catch |short| switch (short) {
-                        error.EndOfStream => return error.Invalid,
-                        error.ReadFailed => return error.ReadFailed,
-                    },
-                    error.ReadFailed => return error.ReadFailed,
-                };
-                // An entry's stream starts with its frame: a skippable
-                // frame first names no window to size the buffer by.
-                const fh = switch (warp.zstd.frameHeader(head, .standard) catch return error.Invalid) {
-                    .zstd => |h| h,
-                    .skippable => return error.Invalid,
-                };
-                const window = fh.window_size;
-                if (Limits.over(limits.window, window)) return error.LimitExceeded;
-                const block = @min(window, 128 * 1024);
-                d.buffer = try gpa.alloc(u8, 4096 + @as(usize, @intCast(window)) + block + warp.zstd.decompress_margin);
-                d.state = .{ .zstd = .init(input, d.buffer, .{ .frames = if (options.self_terminated) .one else .all }) };
+                d.state = .{ .zstd = .{ .input = input, .gpa = gpa, .limit = limits.window, .all = !options.self_terminated } };
+                d.state.zstd.interface.buffer = &d.state.zstd.own;
+                // An entry's stream starts with a frame.
+                const first = try Zstd.nextFrame(input) orelse return error.Invalid;
+                try d.state.zstd.begin(first);
             },
             else => return error.UnsupportedMethod,
         }
     }
 
+    /// LZMA with `properties`, or LZMA2 without, over a window for
+    /// `dictionary`, or for the declared size where that is less: no
+    /// distance reaches before the start.
+    fn initLzma(d: *Decoder, input: *Io.Reader, properties: ?warp.lzma.Properties, dictionary: u32, options: Options) DecodeError!void {
+        const held = @min(dictionary, options.size orelse dictionary);
+        const window = warp.lzma.Decompress.windowLength(held);
+        if (Limits.over(options.limits.window, window)) return error.LimitExceeded;
+        d.buffer = try d.gpa.alignedAlloc(u8, .@"4", read_len + window);
+        const format: warp.lzma.Decompress.Format = if (properties) |p| .{ .lzma1 = .{ .properties = p, .dictionary = held, .size = options.size } } else .{ .lzma2 = .{ .dictionary = held } };
+        d.state = .{ .lzma = .init(input, d.buffer[0..read_len], d.buffer[read_len..], format, .{}) };
+    }
+
     pub fn deinit(d: *Decoder) void {
+        if (d.state == .zstd) d.gpa.free(d.state.zstd.memory);
         d.gpa.free(d.buffer);
         d.* = undefined;
     }
@@ -111,6 +162,9 @@ pub const Decoder = struct {
             .stored => |r| r,
             .deflate => |*r| &r.interface,
             .zstd => |*r| &r.interface,
+            .lzma => |*r| &r.interface,
+            .bzip2 => |*r| &r.interface,
+            .filter => |*r| &r.interface,
         };
     }
 
@@ -118,10 +172,100 @@ pub const Decoder = struct {
     /// corrupt stream) and not its input's.
     pub fn failed(d: *const Decoder) bool {
         return switch (d.state) {
-            .stored => false,
+            // A converter takes any bytes.
+            .stored, .filter => false,
             .deflate => |*r| r.err() != null,
-            .zstd => |*r| r.err() != null,
+            .zstd => |*r| r.failure != null or r.frame.err() != null,
+            .lzma => |*r| r.err() != null,
+            .bzip2 => |*r| r.err() != null,
         };
+    }
+};
+
+/// zstd's frames one at a time, each over the window its own header
+/// names: a stream's frames may name different windows (7-Zip's starts
+/// with an empty frame of a small one), so the memory grows to the
+/// largest, within `Limits.window`, as the frames come.
+const Zstd = struct {
+    interface: Io.Reader = .{ .vtable = &.{ .stream = stream, .readVec = readVec }, .buffer = &.{}, .seek = 0, .end = 0 },
+    own: [Decoder.read_len]u8 = undefined,
+    input: *Io.Reader,
+    gpa: Allocator,
+    limit: Limits.Bytes,
+    /// Every frame until the input ends, or the first alone.
+    all: bool,
+    frame: warp.zstd.Decompress.Reader = undefined,
+    memory: []align(4) u8 = &.{},
+    /// A later frame's header was malformed or past the limit.
+    failure: ?DecodeError = null,
+
+    /// The next zstd frame's header, skippable frames before it read
+    /// through; null where the input ends.
+    fn nextFrame(input: *Io.Reader) DecodeError!?warp.zstd.FrameHeader {
+        while (true) {
+            const head = input.peek(18) catch |e| switch (e) {
+                // A stream shorter than the longest frame header.
+                error.EndOfStream => input.peekGreedy(1) catch |short| switch (short) {
+                    error.EndOfStream => return null,
+                    error.ReadFailed => return error.ReadFailed,
+                },
+                error.ReadFailed => return error.ReadFailed,
+            };
+            switch (warp.zstd.frameHeader(head, .standard) catch return error.Invalid) {
+                .zstd => |h| return h,
+                .skippable => |s| input.discardAll(8 + @as(usize, s.len)) catch |e| return switch (e) {
+                    error.EndOfStream => error.Invalid,
+                    error.ReadFailed => error.ReadFailed,
+                },
+            }
+        }
+    }
+
+    /// Decodes the frame `h` heads, in memory sized by its window.
+    fn begin(z: *Zstd, h: warp.zstd.FrameHeader) DecodeError!void {
+        if (Limits.over(z.limit, h.window_size)) return error.LimitExceeded;
+        const need = Decoder.read_len + @as(usize, @intCast(h.window_size)) + h.blockMax() + warp.zstd.decompress_margin;
+        if (need > z.memory.len) {
+            z.gpa.free(z.memory);
+            z.memory = &.{};
+            z.memory = try z.gpa.alignedAlloc(u8, .@"4", need);
+        }
+        z.frame = .init(z.input, z.memory, .{ .frames = .one });
+    }
+
+    fn readInto(z: *Zstd, out: []u8) Io.Reader.Error!usize {
+        while (true) {
+            const n = try z.frame.interface.readSliceShort(out);
+            if (n != 0 or out.len == 0) return n;
+            if (!z.all) return error.EndOfStream;
+            const next = nextFrame(z.input) catch |e| {
+                if (e != error.ReadFailed) z.failure = e;
+                return error.ReadFailed;
+            };
+            const h = next orelse return error.EndOfStream;
+            z.begin(h) catch |e| {
+                z.failure = e;
+                return error.ReadFailed;
+            };
+        }
+    }
+
+    fn stream(interface: *Io.Reader, writer: *Io.Writer, limit: Io.Limit) Io.Reader.StreamError!usize {
+        const z: *Zstd = @alignCast(@fieldParentPtr("interface", interface));
+        _ = writer;
+        if (limit == .nothing) return 0;
+        const n = try z.readInto(limit.slice(interface.buffer));
+        interface.seek = 0;
+        interface.end = n;
+        return 0;
+    }
+
+    fn readVec(interface: *Io.Reader, data: [][]u8) Io.Reader.Error!usize {
+        const z: *Zstd = @alignCast(@fieldParentPtr("interface", interface));
+        if (data[0].len != 0) return z.readInto(data[0]);
+        const n = try z.readInto(interface.buffer[interface.end..]);
+        interface.end += n;
+        return 0;
     }
 };
 
@@ -207,5 +351,31 @@ pub const Encoder = struct {
 test "a method warp lacks is refused by name" {
     var d: Decoder = undefined;
     var in: Io.Reader = .fixed("");
-    try std.testing.expectError(error.UnsupportedMethod, d.init(std.testing.allocator, .lzma, &in, .{}));
+    try std.testing.expectError(error.UnsupportedMethod, d.init(std.testing.allocator, .{ .method = .ppmd }, &in, .{}));
+}
+
+test "zip's LZMA header is read, and one that breaks it refused" {
+    const gpa = std.testing.allocator;
+    var d: Decoder = undefined;
+    // Properties of four bytes, not five.
+    var bad: Io.Reader = .fixed("\x10\x02\x04\x00\x5d\x00\x00\x01\x00");
+    try std.testing.expectError(error.Invalid, d.init(gpa, .{ .method = .lzma }, &bad, .{}));
+    // A properties byte past 224.
+    var props: Io.Reader = .fixed("\x10\x02\x05\x00\xe1\x00\x00\x01\x00");
+    try std.testing.expectError(error.Invalid, d.init(gpa, .{ .method = .lzma }, &props, .{}));
+    var short: Io.Reader = .fixed("\x10\x02\x05\x00\x5d");
+    try std.testing.expectError(error.Invalid, d.init(gpa, .{ .method = .lzma }, &short, .{}));
+    // A 1 GiB dictionary over a 128 MiB limit.
+    var big: Io.Reader = .fixed("\x10\x02\x05\x00\x5d\x00\x00\x00\x40");
+    try std.testing.expectError(error.LimitExceeded, d.init(gpa, .{ .method = .lzma }, &big, .{}));
+}
+
+test "an LZMA window is no larger than the declared contents" {
+    const gpa = std.testing.allocator;
+    var d: Decoder = undefined;
+    var in: Io.Reader = .fixed("");
+    // 1 GiB declared, 100 bytes of contents: the window is LZMA's least.
+    try d.init(gpa, .{ .lzma2 = .{ .dictionary = 1 << 30 } }, &in, .{ .size = 100 });
+    defer d.deinit();
+    try std.testing.expectEqual(Decoder.read_len + warp.lzma.Decompress.windowLength(100), d.buffer.len);
 }
