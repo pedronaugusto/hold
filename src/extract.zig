@@ -272,7 +272,7 @@ const Extraction = struct {
         }
         w.flush() catch return writeError(pending.cause());
         if (x.options.times) if (e.mtime) |t| {
-            try pending.file().setTimestamps(x.io, .{ .modify_timestamp = .{ .new = t }, .access_timestamp = .init(e.atime) });
+            try pending.file().get().setTimestamps(x.io, .{ .modify_timestamp = .{ .new = t }, .access_timestamp = .init(e.atime) });
         };
         p.batch.addPending(x.io, pending, .replace) catch unreachable; // unreachable: `room` made space
         in_batch = true;

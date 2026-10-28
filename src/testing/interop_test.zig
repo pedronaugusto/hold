@@ -140,7 +140,7 @@ fn zipManifest(gpa: std.mem.Allocator, archive_bytes: []const u8, out: *std.Io.W
         s.* = try .init(gpa, p.len);
         try s.replace(p);
     }
-    defer for (&secrets) |*s| s.deinit();
+    defer for (&secrets) |*s| s.deinit(gpa);
     var it = archive.iterate();
     var local_extra: std.ArrayList(u8) = .empty;
     defer local_extra.deinit(gpa);
@@ -242,7 +242,7 @@ fn sevenzManifest(gpa: std.mem.Allocator, archive_bytes: []const u8, out: *std.I
         s.* = try .init(gpa, p.len);
         try s.replace(p);
     }
-    defer for (&secrets) |*s| s.deinit();
+    defer for (&secrets) |*s| s.deinit(gpa);
     for (&secrets, 0..) |*secret, i| {
         var attempt: std.Io.Writer.Allocating = .init(gpa);
         defer attempt.deinit();
