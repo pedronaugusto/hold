@@ -15,6 +15,7 @@ const header = @import("header.zig");
 const pax = @import("pax.zig");
 const Entry = @import("../Entry.zig");
 const text = @import("../text.zig");
+const time = @import("../time.zig");
 
 pub const Format = enum { ustar, pax, gnu };
 
@@ -197,8 +198,8 @@ const Draft = struct {
     fn times(d: *Draft, h: Header) BeginError!void {
         const e = h.entry;
         const mtime = e.mtime orelse Entry.seconds(0);
-        const secs = @divFloor(mtime.nanoseconds, std.time.ns_per_s);
-        const whole = @rem(mtime.nanoseconds, std.time.ns_per_s) == 0;
+        const secs = time.wholeSeconds(mtime);
+        const whole = time.isWhole(mtime);
         const fits = secs >= 0 and header.fitsOctal(12, @intCast(@min(secs, std.math.maxInt(u64))));
         if (fits) {
             header.putOctal(header.mtime.slot(&d.b), @intCast(secs));
@@ -382,7 +383,7 @@ fn paxBlock(w: *Writer, b: *header.Block, flag: u8, name: []const u8, mode: u32,
     const e = h.entry;
     header.putOctal(header.uid.slot(b), if (e.uid) |v| (if (header.fitsOctal(8, v)) v else 0) else 0);
     header.putOctal(header.gid.slot(b), if (e.gid) |v| (if (header.fitsOctal(8, v)) v else 0) else 0);
-    const secs: i96 = if (e.mtime) |t| @divFloor(t.nanoseconds, std.time.ns_per_s) else 0;
+    const secs: i96 = if (e.mtime) |t| time.wholeSeconds(t) else 0;
     header.putOctal(header.mtime.slot(b), @intCast(std.math.clamp(secs, 0, 0o77777777777)));
     header.putOctal(header.devmajor.slot(b), 0);
     header.putOctal(header.devminor.slot(b), 0);

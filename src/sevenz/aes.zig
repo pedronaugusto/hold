@@ -75,18 +75,18 @@ pub fn deriveKey(props: Props, password: *const aegis.SecretBytes, key: *aegis.S
         @memcpy(k[a..][0..b], pw[0..b]);
         return;
     }
-    var h = Sha256.init(.{});
+    var h = aegis.Secret(Sha256).init(.init(.{}));
+    defer h.deinit();
     var round: u64 = 0;
     const rounds = @as(u64, 1) << props.cycles;
     while (round < rounds) : (round += 1) {
-        h.update(salt);
-        h.update(pw);
+        h.exposeMut().update(salt);
+        h.exposeMut().update(pw);
         var counter: [8]u8 = undefined;
         std.mem.writeInt(u64, &counter, round, .little);
-        h.update(&counter);
+        h.exposeMut().update(&counter);
     }
-    h.final(k);
-    crypto.secureZero(u8, std.mem.asBytes(&h));
+    h.exposeMut().final(k);
 }
 
 pub const Error = error{
@@ -103,11 +103,11 @@ pub const Reader = struct {
     inner: *Io.Reader,
     /// Private: plaintext bytes still to give.
     left: u64,
-    ctx: crypto.core.aes.AesDecryptCtx(Aes256),
+    ctx: aegis.Secret(crypto.core.aes.AesDecryptCtx(Aes256)),
     /// Private: the last ciphertext block, the next block's chain.
     chain: [16]u8,
     /// Private: the block decrypted and how much of it was given.
-    block: [16]u8 = undefined,
+    block: aegis.Secret([16]u8) = .init(undefined),
     used: u8 = 16,
     failure: ?Error = null,
     /// Private: staged plaintext, for a decoder that reads it in place.
@@ -124,17 +124,17 @@ pub const Reader = struct {
             .interface = .{ .vtable = &vtable, .buffer = &.{}, .seek = 0, .end = 0 },
             .inner = inner,
             .left = size,
-            .ctx = .init(key.expose().*),
+            .ctx = .init(.init(key.expose().*)),
             .chain = props.iv,
         };
         r.interface.buffer = &r.staging;
     }
 
-    /// Erases the key schedule and the plaintext held.
+    /// Erases the key schedule and the block decrypted last. The staged
+    /// plaintext is the caller's to read, as every reader's buffer is.
     pub fn deinit(r: *Reader) void {
-        crypto.secureZero(u8, std.mem.asBytes(&r.ctx));
-        crypto.secureZero(u8, &r.block);
-        crypto.secureZero(u8, &r.staging);
+        r.ctx.deinit();
+        r.block.deinit();
     }
 
     pub fn err(r: *const Reader) ?Error {
@@ -151,7 +151,7 @@ pub const Reader = struct {
         while (n < out.len) {
             if (r.used == 16) try r.next();
             const k = @min(16 - r.used, out.len - n);
-            @memcpy(out[n..][0..k], r.block[r.used..][0..k]);
+            @memcpy(out[n..][0..k], r.block.expose()[r.used..][0..k]);
             r.used += @intCast(k);
             n += k;
         }
@@ -166,8 +166,8 @@ pub const Reader = struct {
             error.EndOfStream => r.fail(error.Truncated),
             error.ReadFailed => error.ReadFailed,
         };
-        r.ctx.decrypt(&r.block, &cipher);
-        for (&r.block, r.chain) |*b, c| b.* ^= c;
+        r.ctx.expose().decrypt(r.block.exposeMut(), &cipher);
+        for (r.block.exposeMut(), r.chain) |*b, c| b.* ^= c;
         r.chain = cipher;
         r.used = 0;
     }

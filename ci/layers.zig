@@ -7,6 +7,7 @@ pub const layers: []const gantry.rules.Layer = &.{
         "src/Limits.zig",
         "src/Diagnostic.zig",
         "src/text.zig",
+        "src/time.zig",
         "src/name.zig",
     } },
     .{ .name = "streams and codecs", .patterns = &.{

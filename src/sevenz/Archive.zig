@@ -19,6 +19,7 @@ const Bounded = @import("../Bounded.zig");
 const Checked = @import("../Checked.zig");
 const Entry = @import("../Entry.zig");
 const text = @import("../text.zig");
+const time = @import("../time.zig");
 
 /// Where the archive's bytes are.
 pub const Source = @import("../source.zig").Source;
@@ -307,8 +308,7 @@ fn describe(arena: Allocator, f: header.File, e: *Entry) Allocator.Error!void {
 
 /// FILETIME, 100 ns since 1601, as a timestamp.
 fn filetime(t: ?u64) ?Io.Timestamp {
-    const ticks = t orelse return null;
-    return .{ .nanoseconds = @as(i96, ticks) * 100 - @as(i96, 11_644_473_600) * std.time.ns_per_s };
+    return time.fromFiletime(t orelse return null);
 }
 
 /// The name as UTF-8 from UTF-16LE; an unpaired surrogate is kept as

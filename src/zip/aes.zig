@@ -54,10 +54,10 @@ pub const Reader = struct {
     inner: *Io.Reader,
     /// Private: ciphertext bytes still to come.
     left: u64,
-    cipher: Cipher,
-    mac: HmacSha1,
+    cipher: aegis.Secret(Cipher),
+    mac: aegis.Secret(HmacSha1),
     counter: u128 = 1,
-    keystream: [16]u8 = undefined,
+    keystream: aegis.Secret([16]u8) = .init(undefined),
     used: u8 = 16,
     failure: ?Error = null,
     /// Private: staged plaintext, for a decoder that reads it in place.
@@ -81,22 +81,22 @@ pub const Reader = struct {
         defer keys.deinit();
         const k = keys.exposeMut()[0 .. 2 * key_len + verifier_len];
         crypto.pwhash.pbkdf2(k, password.expose(), s, 1000, HmacSha1) catch unreachable; // aegis: no-danger: 1,000 rounds and at most 66 bytes are within PBKDF2's bounds, whatever the archive says
-        if (!crypto.timing_safe.eql([verifier_len]u8, k[2 * key_len ..][0..verifier_len].*, verifier)) return error.WrongPassword;
+        if (!aegis.secret.equal(verifier_len, k[2 * key_len ..][0..verifier_len], &verifier).declassify("the verifier's verdict is the format's own answer to the password")) return error.WrongPassword;
         r.* = .{
             .interface = .{ .vtable = &vtable, .buffer = &.{}, .seek = 0, .end = 0 },
             .inner = inner,
             .left = total - overhead(strength),
-            .cipher = if (wide) .{ .a256 = .init(k[0..32].*) } else .{ .a128 = .init(k[0..16].*) },
-            .mac = .init(k[key_len..][0..key_len]),
+            .cipher = .init(if (wide) .{ .a256 = .init(k[0..32].*) } else .{ .a128 = .init(k[0..16].*) }),
+            .mac = .init(.init(k[key_len..][0..key_len])),
         };
         r.interface.buffer = &r.staging;
     }
 
     /// Erases the keys.
     pub fn deinit(r: *Reader) void {
-        crypto.secureZero(u8, std.mem.asBytes(&r.cipher));
-        crypto.secureZero(u8, std.mem.asBytes(&r.mac));
-        crypto.secureZero(u8, &r.keystream);
+        r.cipher.deinit();
+        r.mac.deinit();
+        r.keystream.deinit();
     }
 
     pub fn err(r: *const Reader) ?Error {
@@ -111,7 +111,7 @@ pub const Reader = struct {
         const out = limit.min(.limited64(r.left)).slice(try w.writableSliceGreedy(1));
         const n = r.inner.readSliceShort(out) catch return error.ReadFailed;
         if (n == 0) return r.fail(error.Truncated);
-        r.mac.update(out[0..n]);
+        r.mac.exposeMut().update(out[0..n]);
         r.decrypt(out[0..n]);
         r.left -= n;
         w.advance(n);
@@ -123,13 +123,13 @@ pub const Reader = struct {
             if (r.used == 16) {
                 var block: [16]u8 = undefined;
                 std.mem.writeInt(u128, &block, r.counter, .little);
-                switch (r.cipher) {
-                    inline else => |*c| c.encrypt(&r.keystream, &block),
+                switch (r.cipher.exposeMut().*) {
+                    inline else => |*c| c.encrypt(r.keystream.exposeMut(), &block),
                 }
                 r.counter +%= 1;
                 r.used = 0;
             }
-            b.* ^= r.keystream[r.used];
+            b.* ^= r.keystream.expose()[r.used];
             r.used += 1;
         }
     }
@@ -143,8 +143,8 @@ pub const Reader = struct {
             error.ReadFailed => error.ReadFailed,
         };
         var computed: [HmacSha1.mac_length]u8 = undefined;
-        r.mac.final(&computed);
-        if (!crypto.timing_safe.eql([mac_len]u8, computed[0..mac_len].*, stored)) return r.fail(error.AuthenticationFailed);
+        r.mac.exposeMut().final(&computed);
+        if (!aegis.secret.equal(mac_len, computed[0..mac_len], &stored).declassify("the MAC's verdict is the entry's authentication, reported as it is")) return r.fail(error.AuthenticationFailed);
         return error.EndOfStream;
     }
 
