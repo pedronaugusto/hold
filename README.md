@@ -68,8 +68,8 @@ hostile-input rules.
   streams and files, anti items, times and attributes, CRCs; 7z AES read
   with a password. Coders: copy, LZMA, LZMA2, DEFLATE, Deflate64, bzip2,
   zstd, Delta and the BCJ filters (x86, PowerPC, IA-64, ARM, ARM Thumb,
-  SPARC, ARM64, RISC-V). PPMd, BCJ2 and self-extracting archives are
-  refused.
+  SPARC, ARM64, RISC-V) and BCJ2, its four streams read side by side.
+  PPMd and self-extracting archives are refused.
 - **Extraction**: `hold.extract` writes any of them into a directory with
   the hostile-input rules on: names checked, no write through a link,
   links last and only inside, specials refused, permissions as Python's

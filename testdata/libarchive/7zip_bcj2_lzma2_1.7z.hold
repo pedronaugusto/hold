@@ -1,2 +1,0 @@
-# BCJ2 (coder 0303011b) splits x86 code into four streams; hold reads folders of one-in, one-out coders and refuses BCJ2 by name, as it refuses any coder of several streams.
-error UnsupportedMethod

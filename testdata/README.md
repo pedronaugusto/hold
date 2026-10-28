@@ -29,7 +29,9 @@ in its `# ` lines, why.
 - `sevenz/`: the zip tree by 7-Zip 26.05 (`7zz-*`, headers left plain:
   copy, DEFLATE solid and not, times, Deflate64, bzip2, LZMA2, x86 BCJ, AES
   with password `hold` on copy and DEFLATE and on the header) and bsdtar
-  3.8 (`bsdtar38-*`, every 7z compression it writes).
+  3.8 (`bsdtar38-*`, every 7z compression it writes); `7zz-bcj2.7z` is
+  libarchive's x86 test program (`7zip_bcj2_copy_1.7z`) by 7-Zip 26.05 with
+  `-mf=BCJ2` (BCJ2 over LZMA2 and LZMA, its header encoded).
 - `libarchive/7zip_*`: the 7z archives of libarchive 3.8.1's test suite;
   its three self-extractors are left out (hold reads no self-extractor).
 

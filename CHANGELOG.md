@@ -24,6 +24,10 @@ follow [Semantic Versioning](https://semver.org/).
   and bsdtar's archives, whose headers are LZMA, now read as libarchive
   reads them. An LZMA window is no larger than the contents it decodes.
 - zip methods 12 (bzip2) and 14 (LZMA, its properties leading the stream).
+- 7z's BCJ2 (0303011b) through warp's `Bcj2`: a folder is read as the
+  graph its binds make, each packed stream by a reader of its own
+  (`Source.independentAt`), so BCJ2's four are read side by side. libarchive's
+  BCJ2 corpus and 7-Zip 26.05's `-mf=BCJ2` read as libarchive reads them.
 
 ### Changed
 
