@@ -75,23 +75,19 @@ pub fn parseTime(text: []const u8) TimeError!Io.Timestamp {
 /// A time as `parseTime` reads it: whole seconds, and a fraction only when
 /// there is one, its trailing zeros dropped.
 pub fn formatTime(t: Io.Timestamp, buffer: *[40]u8) []const u8 {
-    var w: Io.Writer = .fixed(buffer);
     const ns = t.nanoseconds;
-    const negative = ns < 0;
-    const mag: u96 = @intCast(if (negative) -ns else ns);
+    const sign = if (ns < 0) "-" else "";
+    // The most negative time's magnitude has no positive i96.
+    const mag: u96 = @abs(ns);
     const secs = mag / std.time.ns_per_s;
     var frac: u96 = mag % std.time.ns_per_s;
-    if (negative) w.writeByte('-') catch unreachable; // unreachable: 40 bytes hold any i96 time
-    w.print("{d}", .{secs}) catch unreachable; // unreachable: as above
-    if (frac != 0) {
-        var digits: usize = 9;
-        while (frac % 10 == 0) {
-            frac /= 10;
-            digits -= 1;
-        }
-        w.print(".{d:0>[1]}", .{ frac, digits }) catch unreachable; // unreachable: as above
+    if (frac == 0) return std.fmt.bufPrint(buffer, "{s}{d}", .{ sign, secs }) catch unreachable; // aegis: no-danger: 40 bytes hold any i96 time: a sign, 20 digits of seconds and ten of the fraction
+    var digits: usize = 9;
+    while (frac % 10 == 0) {
+        frac /= 10;
+        digits -= 1;
     }
-    return w.buffered();
+    return std.fmt.bufPrint(buffer, "{s}{d}.{d:0>[3]}", .{ sign, secs, frac, digits }) catch unreachable; // aegis: no-danger: 40 bytes hold any i96 time: a sign, 20 digits of seconds and ten of the fraction
 }
 
 test Iterator {

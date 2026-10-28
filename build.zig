@@ -140,5 +140,6 @@ fn benchImports(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.l
     return b.allocator.dupe(std.Build.Module.Import, &.{
         .{ .name = "hold", .module = holdModule(p, target, optimize) },
         .{ .name = "warp", .module = p.dependency("warp", .{ .target = target, .optimize = optimize }).module("warp") },
+        .{ .name = "aegis", .module = p.dependency("aegis", .{ .target = target, .optimize = optimize }).module("aegis") },
     }) catch @panic("OOM");
 }

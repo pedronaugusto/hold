@@ -14,10 +14,10 @@ fn tarArchive(_: void, smith: *std.testing.Smith) !void {
     defer tr.deinit();
     var count: usize = 0;
     while (count < 64) : (count += 1) {
-        const entry = tr.next() catch |e| switch (e) {
+        const entry = (tr.next() catch |e| switch (e) {
             error.Invalid, error.Truncated, error.LimitExceeded => return,
             else => return e,
-        } orelse return;
+        }) orelse return;
         var sink: std.Io.Writer.Discarding = .init(&.{});
         const got = tr.contents().streamRemaining(&sink.writer) catch |e| switch (e) {
             error.ReadFailed => {
@@ -103,10 +103,10 @@ fn zipStream(_: void, smith: *std.testing.Smith) !void {
     defer st.deinit();
     var count: usize = 0;
     while (count < 32) : (count += 1) {
-        const record = st.next() catch |e| switch (e) {
+        const record = (st.next() catch |e| switch (e) {
             error.Invalid, error.Unsupported, error.LimitExceeded, error.Truncated => return,
             else => return e,
-        } orelse return;
+        }) orelse return;
         _ = record;
         var sink_buffer: [256]u8 = undefined;
         var sink: std.Io.Writer.Discarding = .init(&sink_buffer);

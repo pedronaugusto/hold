@@ -312,10 +312,10 @@ const Extraction = struct {
         const p = x.publish;
         defer x.release();
         _ = p.batch.commit(x.io, .{ .level = x.options.level }) catch |err| {
-            if (p.batch.failure()) |f| {
-                const entry = (f.slot.get(p.entries[0..p.used]) catch unreachable).*; // unreachable: a failed slot was added
-                Diagnostic.set(x.options.diagnostic, entry, 0, .filesystem);
-            }
+            // The entry whose file failed, when its slot names one of the batch's.
+            if (p.batch.failure()) |f| if (f.slot.get(p.entries[0..p.used])) |entry| {
+                Diagnostic.set(x.options.diagnostic, entry.*, 0, .filesystem);
+            } else |_| {};
             p.batch.reset(x.io);
             return err;
         };

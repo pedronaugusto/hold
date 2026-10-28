@@ -12,6 +12,7 @@
 //! write, is left out. `bay bench` runs it; CI runs each row once.
 const std = @import("std");
 const Io = std.Io;
+const aegis = @import("aegis");
 const hold = @import("hold");
 const shakedown = @import("shakedown");
 const provenance = @import("preflight_bench_options");
@@ -108,7 +109,8 @@ const Session = struct {
     fn archive(s: *Session, comptime format: []const u8, t: *const Tree) !?[]const u8 {
         const dir = s.corpus orelse return null;
         const path = try s.arena.print("{s}/{s}{s}", .{ dir, t.name, format });
-        return try Io.Dir.cwd().readFileAlloc(s.io, path, s.arena, .unlimited);
+        // A corpus archive is a few hundred MiB at most.
+        return try aegis.own.readFile(s.io, Io.Dir.cwd(), path, s.arena, .fromRaw(1 << 30));
     }
 
     fn rows(s: *Session, t: *const Tree) !void {
