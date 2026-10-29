@@ -141,7 +141,7 @@ pub fn contents(s: *Stream) *Io.Reader {
     return &s.contents_.interface;
 }
 
-pub const ContentsError = error{ SizeMismatch, CrcMismatch, Truncated, CorruptStream, InvalidDescriptor, LimitExceeded };
+pub const ContentsError = error{ SizeMismatch, CrcMismatch, Truncated, InvalidDescriptor } || codec.Decoder.Failure;
 
 /// The error behind the contents' `error.ReadFailed`, when it was the
 /// entry's and not the input's.
@@ -230,7 +230,7 @@ const Contents = struct {
         const out = limit.min(.limited64(room +| 1)).slice(try w.writableSliceGreedy(1));
         const n = c.decoder.reader().readSliceShort(out) catch {
             if (c.bounded.failure != null and !c.descriptor) return c.fail(error.Truncated);
-            if (c.decoder.failed()) return c.fail(error.CorruptStream);
+            if (c.decoder.failure()) |e| return c.fail(e);
             return error.ReadFailed;
         };
         if (n == 0) return c.finish();

@@ -198,13 +198,13 @@ pub const Contents = struct {
         return &c.checked.interface;
     }
 
-    pub const Error = Checked.Error || Bounded.Error || aes.Error || error{CorruptStream};
+    pub const Error = Checked.Error || Bounded.Error || aes.Error || codec.Decoder.Failure;
 
     /// What was wrong with the entry, behind its reader's `ReadFailed`.
     pub fn err(c: *const Contents) ?Error {
         if (c.stored.failure) |e| return e;
         if (c.decrypt) |*d| if (d.failure) |e| return e;
-        if (c.decoder.failed()) return error.CorruptStream;
+        if (c.decoder.failure()) |e| return e;
         return c.checked.failure;
     }
 

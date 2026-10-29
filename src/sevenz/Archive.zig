@@ -351,8 +351,7 @@ pub const ContentsError = error{
 };
 
 /// What was wrong with an entry, behind its reader's `ReadFailed`.
-pub const Error = Checked.Error || Bounded.Error || aes.Error || error{
-    CorruptStream,
+pub const Error = Checked.Error || Bounded.Error || aes.Error || codec.Decoder.Failure || error{
     /// An encrypted folder's stream fails: the password is wrong, or the
     /// stream is corrupt. 7z's AES carries no MAC to tell the two apart.
     WrongPassword,
@@ -628,7 +627,7 @@ const Cursor = struct {
             const st = &c.stages[i];
             const own: ?Error = switch (st.decoder) {
                 .aes => |*r| r.err(),
-                .codec => |*d| if (d.failed()) @as(Error, error.CorruptStream) else null,
+                .codec => |*d| d.failure(),
                 // A call, jump or range stream short of what the code asks.
                 .bcj2 => |*r| if (r.err() != null) @as(Error, error.CorruptStream) else null,
             };
