@@ -262,3 +262,49 @@ test "more directories than stay open: each still extracts, links across them to
     for (names.items[0..300]) |n| try std.testing.expectEqualStrings(n, try readFile(tmp.dir, n, &buf));
     try std.testing.expectEqualStrings(names.items[0], try readFile(tmp.dir, names.items[300], &buf));
 }
+
+test "in place, the fast mode: each file under its own name, a later entry of a name and a link there replaced, never followed" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDirPath(io, "dest");
+    try tmp.dir.createDirPath(io, "outside");
+    const dest = try tmp.dir.openDir(io, "dest", .{});
+    defer dest.close(io);
+    const links = @import("builtin").os.tag != .windows;
+    // The destination holds a link out at a file's name.
+    if (links) try dest.symLink(io, "../outside/f", "f", .{});
+    const archive = try tarOf(gpa, &.{
+        .{ .entry = .{ .name = "d/a" }, .contents = "first" },
+        .{ .entry = .{ .name = "f" }, .contents = "mine" },
+        .{ .entry = .{ .name = "d/a" }, .contents = "second" },
+    });
+    defer gpa.free(archive);
+    const summary = try extractTar(dest, archive, .{ .place = .in_place });
+    try std.testing.expectEqual(@as(u64, 3), summary.files);
+    var buf: [64]u8 = undefined;
+    try std.testing.expectEqualStrings("second", try readFile(dest, "d/a", &buf));
+    try std.testing.expectEqualStrings("mine", try readFile(dest, "f", &buf));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.statFile(io, "outside/f", .{}));
+    // No temp beside the names.
+    var d = try dest.openDir(io, "d", .{ .iterate = true });
+    defer d.close(io);
+    var it = d.iterate();
+    try std.testing.expectEqualStrings("a", (try it.next(io)).?.name);
+    try std.testing.expectEqual(@as(?std.Io.Dir.Entry, null), try it.next(io));
+}
+
+test "in place, a failed extraction removes the files of its open batch" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const archive = try tarOf(gpa, &.{
+        .{ .entry = .{ .name = "first" }, .contents = "written in place" },
+        .{ .entry = .{ .name = "../out" }, .contents = "refused" },
+    });
+    defer gpa.free(archive);
+    try std.testing.expectError(error.UnsafeName, extractTar(tmp.dir, archive, .{ .place = .in_place }));
+    var it = tmp.dir.iterate();
+    try std.testing.expectEqual(@as(?std.Io.Dir.Entry, null), try it.next(std.testing.io));
+}

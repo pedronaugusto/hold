@@ -73,7 +73,9 @@ hostile-input rules.
 - **Extraction**: `hold.extract` writes any of them into a directory with
   the hostile-input rules on: names checked, no write through a link,
   links last and only inside, specials refused, permissions as Python's
-  `data` filter, a total bound, files through airlock.
+  `data` filter, a total bound, files through airlock: published by
+  rename, or in place at `level = .none` (the fast mode, as libarchive
+  writes).
 
 ## Built with
 

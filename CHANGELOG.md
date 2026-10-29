@@ -28,6 +28,12 @@ follow [Semantic Versioning](https://semver.org/).
   graph its binds make, each packed stream by a reader of its own
   (`Source.independentAt`), so BCJ2's four are read side by side. libarchive's
   BCJ2 corpus and 7-Zip 26.05's `-mf=BCJ2` read as libarchive reads them.
+- Extraction's fast mode, `Extract.Options.place = .in_place`: at
+  `level = .none` each file is created under its own name exclusively
+  (airlock's `Temp.in_place`), with no temp and no rename, as libarchive
+  writes; a file or link already at the name is removed first, never
+  followed. Publish by rename stays the default. `hold-bench` gains the
+  `extract/tar-in-place` rows.
 - zip method 95 (xz) through warp's `.xz` reader, its window allocated as
   each block's header asks (no larger than a block's declared size), within
   `Limits.window`: bsdtar's and libarchive's xz zips read as libarchive
