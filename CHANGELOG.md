@@ -57,6 +57,11 @@ follow [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A header met mid-stream that asks more history than `Limits.window` (a
+  later zstd frame's, an xz block's) is `error.LimitExceeded`, and the
+  memory for its window `error.OutOfMemory`, where both read as
+  `CorruptStream`: `zip.Archive.Contents.Error`, `zip.Stream.ContentsError`
+  and `sevenz.Archive.Error` name them, and extraction reports them so.
 - `tar.Writer` writes a pax time of the most negative nanoseconds an
   `Io.Timestamp` holds, where taking its magnitude stopped a safe build.
 

@@ -182,17 +182,36 @@ pub const Decoder = struct {
         };
     }
 
-    /// Whether the decoder's `error.ReadFailed` was the stream's own (a
-    /// corrupt stream) and not its input's.
-    pub fn failed(d: *const Decoder) bool {
+    /// What failed behind the decoder's `error.ReadFailed`.
+    pub const Failure = error{
+        /// The stream is corrupt.
+        CorruptStream,
+        /// A header met mid-stream (a later zstd frame's, an xz block's)
+        /// asks more history than `Limits.window`.
+        LimitExceeded,
+        /// The memory for a window a later header asks.
+        OutOfMemory,
+    };
+
+    /// The decoder's own failure behind an `error.ReadFailed`; null when
+    /// it was its input's.
+    pub fn failure(d: *const Decoder) ?Failure {
         return switch (d.state) {
             // A converter takes any bytes.
-            .stored, .filter => false,
-            .deflate => |*r| r.err() != null,
-            .zstd => |*r| r.failure != null or r.frame.err() != null,
-            .lzma => |*r| r.err() != null,
-            .xz => |*r| r.err() != null,
-            .bzip2 => |*r| r.err() != null,
+            .stored, .filter => null,
+            .deflate => |*r| if (r.err() != null) error.CorruptStream else null,
+            .zstd => |*r| if (r.failure) |e| switch (e) {
+                error.LimitExceeded => error.LimitExceeded,
+                error.OutOfMemory => error.OutOfMemory,
+                error.UnsupportedMethod, error.Invalid, error.ReadFailed => error.CorruptStream,
+            } else if (r.frame.err() != null) error.CorruptStream else null,
+            .lzma => |*r| if (r.err() != null) error.CorruptStream else null,
+            .xz => |*r| if (r.err()) |e| switch (e) {
+                error.WindowTooLarge => error.LimitExceeded,
+                error.OutOfMemory => error.OutOfMemory,
+                else => error.CorruptStream,
+            } else null,
+            .bzip2 => |*r| if (r.err() != null) error.CorruptStream else null,
         };
     }
 };
@@ -405,7 +424,7 @@ test "zip's xz is read over the window its block's header asks, and one past the
         try d.init(gpa, .{ .method = .xz }, &in, .{ .limits = .{ .window = .literal("64KiB") } });
         defer d.deinit();
         try std.testing.expectError(error.ReadFailed, d.reader().allocRemaining(gpa, .unlimited));
-        try std.testing.expect(d.failed());
+        try std.testing.expectEqual(error.LimitExceeded, d.failure().?);
     }
 }
 

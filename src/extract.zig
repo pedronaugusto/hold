@@ -603,15 +603,20 @@ const Walk = struct {
             .zip_stream => |s| if (s.err()) |e| return switch (e) {
                 error.Truncated => error.Truncated,
                 error.LimitExceeded => error.LimitExceeded,
+                error.OutOfMemory => error.OutOfMemory,
                 else => error.Corrupt,
             },
             .zip => if (w.zip_open) if (w.zip_contents.err()) |e| return switch (e) {
                 error.Truncated => error.Truncated,
+                error.LimitExceeded => error.LimitExceeded,
+                error.OutOfMemory => error.OutOfMemory,
                 else => error.Corrupt,
             },
             .sevenz => |a| if (a.err()) |e| return switch (e) {
                 error.Truncated => error.Truncated,
                 error.WrongPassword => error.WrongPassword,
+                error.LimitExceeded => error.LimitExceeded,
+                error.OutOfMemory => error.OutOfMemory,
                 else => error.Corrupt,
             },
         }
