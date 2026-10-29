@@ -117,7 +117,7 @@ pub const zip = [_]Case{
     .{ .name = "zip/bsdtar-store.zip", .archive = @embedFile("zip/bsdtar-store.zip"), .manifest = @embedFile("zip/bsdtar-store.zip.manifest") },
     .{ .name = "zip/bsdtar38-bzip2.zip", .archive = @embedFile("zip/bsdtar38-bzip2.zip"), .manifest = @embedFile("zip/bsdtar38-bzip2.zip.manifest") },
     .{ .name = "zip/bsdtar38-lzma.zip", .archive = @embedFile("zip/bsdtar38-lzma.zip"), .manifest = @embedFile("zip/bsdtar38-lzma.zip.manifest") },
-    .{ .name = "zip/bsdtar38-xz.zip", .archive = @embedFile("zip/bsdtar38-xz.zip"), .manifest = @embedFile("zip/bsdtar38-xz.zip.hold") },
+    .{ .name = "zip/bsdtar38-xz.zip", .archive = @embedFile("zip/bsdtar38-xz.zip"), .manifest = @embedFile("zip/bsdtar38-xz.zip.manifest") },
     .{ .name = "zip/bsdtar38-zstd.zip", .archive = @embedFile("zip/bsdtar38-zstd.zip"), .manifest = @embedFile("zip/bsdtar38-zstd.zip.manifest") },
     .{ .name = "zip/go-deflate.zip", .archive = @embedFile("zip/go-deflate.zip"), .manifest = @embedFile("zip/go-deflate.zip.manifest") },
     .{ .name = "zip/infozip-deflate.zip", .archive = @embedFile("zip/infozip-deflate.zip"), .manifest = @embedFile("zip/infozip-deflate.zip.manifest") },

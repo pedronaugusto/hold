@@ -1,4 +1,4 @@
-# xz (method 95) is refused by name for now: warp's xz reader takes its window before the block header that names the dictionary is read, and a zip entry's xz is not sized up front yet.
-error UnsupportedMethod
-error UnsupportedMethod
-error UnsupportedMethod
+# 7-Zip and Windows writers store the exact NTFS time; libarchive reads the two-second DOS time beside it (and as local time), hold the NTFS time.
+file 2245 664 1496345179 34da2c32459b4d89 bash.bashrc	
+file 2566 664 1506665898 44a81e54461d1ae6 pacman.conf	
+file 6601 664 1496345179 1cacb0dcf8dbc6b2 profile	

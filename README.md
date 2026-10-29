@@ -60,8 +60,8 @@ hostile-input rules.
   and NTFS times; entries whose data overlap are refused. WinZip AES (128-
   and 256-bit) is read; ZipCrypto, PKWARE's strong encryption and AES-192 are
   refused by name, and nothing is written encrypted. Methods: stored,
-  DEFLATE and zstd both ways; Deflate64, bzip2 and LZMA read. xz and PPMd
-  are refused by name. A name without the UTF-8 flag is UTF-8 when it is
+  DEFLATE and zstd both ways; Deflate64, bzip2, LZMA and xz read. PPMd is
+  refused by name. A name without the UTF-8 flag is UTF-8 when it is
   well formed, code page 437 decoded when an MS-DOS host wrote it, and its
   bytes otherwise.
 - **7z**: read: encoded headers, solid folders of chained coders, empty

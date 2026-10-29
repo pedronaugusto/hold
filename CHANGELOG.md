@@ -28,12 +28,16 @@ follow [Semantic Versioning](https://semver.org/).
   graph its binds make, each packed stream by a reader of its own
   (`Source.independentAt`), so BCJ2's four are read side by side. libarchive's
   BCJ2 corpus and 7-Zip 26.05's `-mf=BCJ2` read as libarchive reads them.
+- zip method 95 (xz) through warp's `.xz` reader, its window allocated as
+  each block's header asks (no larger than a block's declared size), within
+  `Limits.window`: bsdtar's and libarchive's xz zips read as libarchive
+  reads them.
 
 ### Changed
 
 - aegis 0.3, which has one way to lend: an extraction holds the caller's directory, and lends the ones it opens, as the `std.Io.Dir` itself, never closing the caller's. On airlock's reflink-lock line a pending's file is the `std.Io.File` and a batch's adds take the room `room` made, with no error. Pins aegis breaking-0.3 (7bdb587), and warp, airlock (reflink-lock), xenoglyph and shakedown on it.
 - Pins aegis 0.2.3, the 0.2 line, airlock 0.6.0 and xenoglyph 0.5.1, and
-  warp at its 0.5.0 car until the tag; developed with shakedown 0.6.0 and
+  warp at its `xz-window` branch (the 0.5.0 car and the xz window) until the tag; developed with shakedown 0.6.0 and
   preflight 0.18.5.
 - AES keys, key schedules, MAC states and keystreams are held in aegis
   `Secret`s and compared through `aegis.secret.equal`; 7z AES no longer
