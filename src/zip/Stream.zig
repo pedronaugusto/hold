@@ -223,7 +223,7 @@ const Contents = struct {
     const vtable: Io.Reader.VTable = .{ .stream = stream };
 
     fn stream(io_r: *Io.Reader, w: *Io.Writer, limit: Io.Limit) Io.Reader.StreamError!usize {
-        const c: *Contents = @fieldParentPtr("interface", io_r);
+        const c: *Contents = @alignCast(@fieldParentPtr("interface", io_r)); // safe: the vtable is installed only on a Contents's interface
         if (c.failure != null) return error.ReadFailed;
         if (c.ended) return error.EndOfStream;
         const room = if (c.descriptor) Limits.left(c.owner.options.limits.entry, c.size) else c.expected_size - c.size;

@@ -1,8 +1,0 @@
-# xz (method 95) is refused by name for now: warp's xz reader takes its window before the block header that names the dictionary is read, and a zip entry's xz is not sized up front yet.
-directory 0 755 1577934245 cbf29ce484222325 dir/	
-error UnsupportedMethod
-error UnsupportedMethod
-error UnsupportedMethod
-error UnsupportedMethod
-error UnsupportedMethod
-symlink 0 755 1577934245 cbf29ce484222325 link	dir/a.txt

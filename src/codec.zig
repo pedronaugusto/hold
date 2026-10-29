@@ -61,6 +61,7 @@ pub const Decoder = struct {
         deflate: warp.Inflate.Reader,
         zstd: Zstd,
         lzma: warp.lzma.Decompress.Reader,
+        xz: warp.xz.Decompress.Reader,
         bzip2: warp.bzip2.Decompress.Reader,
         filter: warp.xz.FilterReader,
     };
@@ -71,8 +72,8 @@ pub const Decoder = struct {
     pub const Options = struct {
         limits: Limits = .{},
         /// The stream ends at its codec's own end and what follows is not
-        /// its (an entry with a data descriptor): one zstd frame or bzip2
-        /// stream, not all of them until the input ends.
+        /// its (an entry with a data descriptor): one zstd frame, or one
+        /// bzip2 or xz stream, not all of them until the input ends.
         self_terminated: bool = false,
         /// The decoded length where the archive declares it: an LZMA
         /// stream ends there, with or without its end marker, and keeps no
@@ -127,6 +128,14 @@ pub const Decoder = struct {
                 const dictionary = std.mem.readInt(u32, head[5..9], .little);
                 return d.initLzma(input, properties, dictionary, options);
             },
+            .xz => {
+                // Zip method 95: an .xz stream, whose dictionary each block's
+                // header names. The reader allocates the window as the
+                // blocks ask, within `Limits.window`.
+                const max_window = std.math.cast(usize, limits.window.raw()) orelse std.math.maxInt(usize);
+                d.buffer = try gpa.alignedAlloc(u8, .@"4", read_len);
+                d.state = .{ .xz = .init(gpa, input, d.buffer, max_window, .{ .streams = if (options.self_terminated) .one else .all }) };
+            },
             .zstd => {
                 d.state = .{ .zstd = .{ .input = input, .gpa = gpa, .limit = limits.window, .all = !options.self_terminated } };
                 d.state.zstd.interface.buffer = &d.state.zstd.own;
@@ -151,7 +160,11 @@ pub const Decoder = struct {
     }
 
     pub fn deinit(d: *Decoder) void {
-        if (d.state == .zstd) d.gpa.free(d.state.zstd.memory);
+        switch (d.state) {
+            .zstd => |z| d.gpa.free(z.memory),
+            .xz => |*r| r.deinit(),
+            else => {},
+        }
         d.gpa.free(d.buffer);
         d.* = undefined;
     }
@@ -163,6 +176,7 @@ pub const Decoder = struct {
             .deflate => |*r| &r.interface,
             .zstd => |*r| &r.interface,
             .lzma => |*r| &r.interface,
+            .xz => |*r| &r.interface,
             .bzip2 => |*r| &r.interface,
             .filter => |*r| &r.interface,
         };
@@ -177,6 +191,7 @@ pub const Decoder = struct {
             .deflate => |*r| r.err() != null,
             .zstd => |*r| r.failure != null or r.frame.err() != null,
             .lzma => |*r| r.err() != null,
+            .xz => |*r| r.err() != null,
             .bzip2 => |*r| r.err() != null,
         };
     }
@@ -368,6 +383,30 @@ test "zip's LZMA header is read, and one that breaks it refused" {
     // A 1 GiB dictionary over a 128 MiB limit.
     var big: Io.Reader = .fixed("\x10\x02\x05\x00\x5d\x00\x00\x00\x40");
     try std.testing.expectError(error.LimitExceeded, d.init(gpa, .{ .method = .lzma }, &big, .{}));
+}
+
+test "zip's xz is read over the window its block's header asks, and one past the limit refused there" {
+    const gpa = std.testing.allocator;
+    // "abc" by liblzma at preset 0 (a 256 KiB dictionary), without a check:
+    // the block's header names no sizes.
+    const stream = "\xfd\x37\x7a\x58\x5a\x00\x00\x00\xff\x12\xd9\x41\x02\x00\x21\x01\x0c\x00\x00\x00\x8f\x98\x41\x9c\x01\x00\x02\x61\x62\x63\x00\x00\x00\x01\x13\x03\x03\xa5\x60\xd8\x06\x72\x9e\x7a\x01\x00\x00\x00\x00\x00\x59\x5a";
+    {
+        var in: Io.Reader = .fixed(stream);
+        var d: Decoder = undefined;
+        try d.init(gpa, .{ .method = .xz }, &in, .{});
+        defer d.deinit();
+        const got = try d.reader().allocRemaining(gpa, .unlimited);
+        defer gpa.free(got);
+        try std.testing.expectEqualStrings("abc", got);
+    }
+    {
+        var in: Io.Reader = .fixed(stream);
+        var d: Decoder = undefined;
+        try d.init(gpa, .{ .method = .xz }, &in, .{ .limits = .{ .window = .literal("64KiB") } });
+        defer d.deinit();
+        try std.testing.expectError(error.ReadFailed, d.reader().allocRemaining(gpa, .unlimited));
+        try std.testing.expect(d.failed());
+    }
 }
 
 test "an LZMA window is no larger than the declared contents" {
