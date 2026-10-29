@@ -2,7 +2,7 @@
 //! rules on (design §3): names checked, parents opened a component at a
 //! time without following links, files written through airlock (a temp
 //! beside the name, published by rename, `batch_len` at a time under one
-//! barrier), links created after every file and only where they stay
+//! barrier; or in place, the fast mode), links created after every file and only where they stay
 //! inside, specials refused, permissions as Python's `data` filter leaves
 //! them, every byte bounded.
 const std = @import("std");
@@ -33,6 +33,8 @@ pub const Options = struct {
     /// What each file and link is made durable to; `.none` is what every
     /// rival does by default.
     level: airlock.Level = .none,
+    /// How a file reaches its name.
+    place: Place = .rename,
     links: Links = .contained,
     specials: Specials = .refuse,
     mode: Mode = .data,
@@ -44,6 +46,21 @@ pub const Options = struct {
     /// when it is opened.
     password: ?*const aegis.SecretBytes = null,
     diagnostic: ?*Diagnostic = null,
+};
+
+pub const Place = enum {
+    /// Written to a temp beside its name and renamed onto it when its
+    /// batch commits: no partial file is ever under its name, and a name
+    /// that was a link is replaced, never followed.
+    rename,
+    /// The fast mode: created under its own name, exclusively (airlock's
+    /// `Temp.in_place`, so a link there is never followed), with no temp
+    /// and no rename, as libarchive writes. A name already taken by a file
+    /// or a link is removed first, as a rename would replace it. The name
+    /// holds a partial file while it is written, and after a crash; one
+    /// that fails is removed. For `level = .none` only, where no crash
+    /// guarantee is asked: another level with it is a bug, and stops.
+    in_place,
 };
 
 pub const Links = enum {
@@ -124,6 +141,7 @@ pub const batch_len = 32;
 
 /// Extracts every entry of `source` into `dir`.
 pub fn extract(io: Io, gpa: Allocator, dir: Io.Dir, source: Source, options: Options) Error!Summary {
+    aegis.assert.pre(options.place == .rename or options.level == .none, "extract: files in place at level .none only");
     const publish = try gpa.create(Publish);
     defer gpa.destroy(publish);
     publish.* = .{ .batch = .init(&publish.slots) };
@@ -244,7 +262,7 @@ const Extraction = struct {
 
     /// A file, written to a temp beside its name and published by rename
     /// when its batch commits, so a name that was a link is replaced,
-    /// never followed.
+    /// never followed; or written in place (`Place.in_place`).
     fn file(x: *Extraction, path: []const u8, e: Entry, contents: *Io.Reader) Error!void {
         const split = splitPath(path);
         const parent = (try x.dirOf(split.dir, true)).get();
@@ -254,7 +272,17 @@ const Extraction = struct {
         // The batch borrows the name until it commits.
         const base = try x.dupe(split.base);
         const pending = &p.pendings[p.pending_count];
-        pending.* = try airlock.create(x.io, parent, base, .{ .mode = .{ .exact = permissions(x.fileMode(e.mode)) } });
+        var create: airlock.CreateOptions = .{ .mode = .{ .exact = permissions(x.fileMode(e.mode)) } };
+        if (x.options.place == .in_place) create.temp = .in_place;
+        pending.* = airlock.create(x.io, parent, base, create) catch |err| switch (err) {
+            // An earlier entry's file of the name, or the destination's own:
+            // replaced, as a rename replaces it. A directory stays, and fails.
+            error.PathAlreadyExists => if (x.options.place == .in_place) again: {
+                try parent.deleteFile(x.io, base);
+                break :again try airlock.create(x.io, parent, base, create);
+            } else return err,
+            else => return err,
+        };
         var in_batch = false;
         defer if (!in_batch) pending.discard(x.io);
         var buffer: [64 * 1024]u8 = undefined;

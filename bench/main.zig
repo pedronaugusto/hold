@@ -124,18 +124,20 @@ const Session = struct {
         try s.measure("zip/write-deflate/{s}", t, zip_bytes, .zip_write_deflate);
         try s.measure("zip/write-store/{s}", t, store_bytes, .zip_write_store);
         if (try s.archive("-deflate.7z", t)) |b| try s.measure("7z/read-deflate/{s}", t, b, .sevenz_read);
-        try s.extractRow(t, tar_bytes);
+        try s.extractRow("extract/tar/{s}", t, tar_bytes, .rename);
+        try s.extractRow("extract/tar-in-place/{s}", t, tar_bytes, .in_place);
     }
 
     /// Extraction of the tar into a fresh directory each unit, at
-    /// `.none` as libarchive's defaults; the directory is removed after
-    /// each, untimed.
-    fn extractRow(s: *Session, t: *const Tree, bytes: []const u8) !void {
+    /// `.none` as libarchive's defaults, each file published by rename or
+    /// written in place (the fast mode, as libarchive writes); the
+    /// directory is removed after each, untimed.
+    fn extractRow(s: *Session, comptime name: []const u8, t: *const Tree, bytes: []const u8, files: hold.Extract.Place) !void {
         const ctx = try s.arena.create(Context);
         const place = try s.arena.print("{s}/extract-tmp", .{s.corpus orelse "."});
-        ctx.* = .{ .gpa = s.gpa, .tree = t, .archive = bytes, .op = .extract, .io = s.io, .place = place };
+        ctx.* = .{ .gpa = s.gpa, .tree = t, .archive = bytes, .op = .extract, .io = s.io, .place = place, .files = files };
         const row: shakedown.bench.Row(Context, Error) = .{
-            .name = try s.arena.print("extract/tar/{s}", .{t.name}),
+            .name = try s.arena.print(name, .{t.name}),
             .unit = "archive",
             .grow = false,
             .run = Context.run,
@@ -180,6 +182,8 @@ const Context = struct {
     /// Extraction: where each unit's directory goes.
     io: Io = undefined,
     place: []const u8 = "",
+    /// Extraction: how each file reaches its name.
+    files: hold.Extract.Place = .rename,
 
     fn setup(c: *Context) Error!void {
         c.out = try c.gpa.alloc(u8, c.tree.total + c.tree.total / 4 + (1 << 20));
@@ -209,7 +213,7 @@ const Context = struct {
         var in: Io.Reader = .fixed(c.archive);
         var tr: hold.tar.Reader = .init(c.gpa, &in, &.{}, .{});
         defer tr.deinit();
-        const summary = try hold.extract(c.io, c.gpa, dir, .{ .tar = &tr }, .{});
+        const summary = try hold.extract(c.io, c.gpa, dir, .{ .tar = &tr }, .{ .place = c.files });
         if (summary.bytes != c.tree.total) return error.WrongLength;
     }
 
