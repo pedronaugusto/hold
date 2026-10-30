@@ -198,7 +198,7 @@ test "durable extraction spans batches: every file, link and directory lands" {
 
 test "a failed extraction publishes nothing of its open batch" {
     const gpa = std.testing.allocator;
-    var tmp = std.testing.tmpDir(.{});
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
     const archive = try tarOf(gpa, &.{
         .{ .entry = .{ .name = "first" }, .contents = "kept back" },
