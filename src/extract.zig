@@ -145,7 +145,7 @@ pub fn extract(io: Io, gpa: Allocator, dir: Io.Dir, source: Source, options: Opt
     const publish = try gpa.create(Publish);
     defer gpa.destroy(publish);
     publish.* = .{ .batch = .init(&publish.slots) };
-    var x: Extraction = .{ .io = io, .gpa = gpa, .root = dir, .options = options, .walk = .{ .source = source }, .publish = publish };
+    var x: Extraction = .{ .io = io, .gpa = gpa, .root = .{ .data = dir }, .options = options, .walk = .{ .source = source }, .publish = publish };
     defer x.deinit();
     while (try x.walk.next(io, gpa, options)) |item| {
         try io.checkCancel();
@@ -175,7 +175,8 @@ const Publish = struct {
 const Extraction = struct {
     io: Io,
     gpa: Allocator,
-    root: Io.Dir,
+    /// The caller's, which it closes after `extract` returns.
+    root: aegis.own.Lent(Io.Dir),
     options: Options,
     walk: Walk,
     publish: *Publish,
@@ -329,7 +330,7 @@ const Extraction = struct {
         if (x.publish.last_dir) |last| if (std.mem.eql(u8, last, path)) return;
         try x.room();
         const owned = try x.dupe(if (path.len == 0) "." else path);
-        x.publish.batch.addDirPath(x.root, owned) catch unreachable; // unreachable: `room` made space
+        x.publish.batch.addDirPath(x.root.get(), owned) catch unreachable; // unreachable: `room` made space
         x.added(entry);
         x.publish.last_dir = owned;
     }
@@ -433,11 +434,11 @@ const Extraction = struct {
     /// `error.ThroughLink`. Every directory opened stays in `opened`, which
     /// closes it: the caller is lent it.
     fn dirOf(x: *Extraction, path: []const u8, create: bool) Error!aegis.own.Lent(Io.Dir) {
-        if (path.len == 0) return .{ .data = x.root };
+        if (path.len == 0) return x.root;
         if (x.opened.get(path)) |d| return .{ .data = d };
         try x.reserve(depth(path));
         // The nearest ancestor already open.
-        var d = x.root;
+        var d = x.root.get();
         var pos: usize = 0;
         var end = path.len;
         while (std.mem.findScalarLast(u8, path[0..end], '/')) |slash| : (end = slash) {
