@@ -297,7 +297,7 @@ test "in place, the fast mode: each file under its own name, a later entry of a 
 
 test "in place, a failed extraction removes the files of its open batch" {
     const gpa = std.testing.allocator;
-    var tmp = std.testing.tmpDir(.{});
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
     const archive = try tarOf(gpa, &.{
         .{ .entry = .{ .name = "first" }, .contents = "written in place" },
