@@ -27,6 +27,7 @@ follow [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- aegis 0.3, which has one way to lend: an extraction holds the caller's directory, and lends the ones it opens, as the `std.Io.Dir` itself, never closing the caller's. On airlock's reflink-lock line a pending's file is the `std.Io.File` and a batch's adds take the room `room` made, with no error. Pins aegis breaking-0.3 (7bdb587), and warp, airlock (reflink-lock), xenoglyph and shakedown on it.
 - Pins aegis 0.2.3, the 0.2 line, airlock 0.6.0 and xenoglyph 0.5.1, and
   warp at its 0.5.0 car until the tag; developed with shakedown 0.6.0 and
   preflight 0.18.5.

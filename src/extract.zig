@@ -127,7 +127,7 @@ pub fn extract(io: Io, gpa: Allocator, dir: Io.Dir, source: Source, options: Opt
     const publish = try gpa.create(Publish);
     defer gpa.destroy(publish);
     publish.* = .{ .batch = .init(&publish.slots) };
-    var x: Extraction = .{ .io = io, .gpa = gpa, .root = .{ .data = dir }, .options = options, .walk = .{ .source = source }, .publish = publish };
+    var x: Extraction = .{ .io = io, .gpa = gpa, .root = dir, .options = options, .walk = .{ .source = source }, .publish = publish };
     defer x.deinit();
     while (try x.walk.next(io, gpa, options)) |item| {
         try io.checkCancel();
@@ -158,7 +158,7 @@ const Extraction = struct {
     io: Io,
     gpa: Allocator,
     /// The caller's, which it closes after `extract` returns.
-    root: aegis.own.Lent(Io.Dir),
+    root: Io.Dir,
     options: Options,
     walk: Walk,
     publish: *Publish,
@@ -248,7 +248,7 @@ const Extraction = struct {
     /// never followed.
     fn file(x: *Extraction, path: []const u8, e: Entry, contents: *Io.Reader) Error!void {
         const split = splitPath(path);
-        const parent = (try x.dirOf(split.dir, true)).get();
+        const parent = try x.dirOf(split.dir, true);
         // After the parent: the directories made for it take slots too.
         try x.room();
         const p = x.publish;
@@ -273,9 +273,9 @@ const Extraction = struct {
         }
         w.flush() catch return writeError(pending.cause());
         if (x.options.times) if (e.mtime) |t| {
-            try pending.file().get().setTimestamps(x.io, .{ .modify_timestamp = .{ .new = t }, .access_timestamp = .init(e.atime) });
+            try pending.file().setTimestamps(x.io, .{ .modify_timestamp = .{ .new = t }, .access_timestamp = .init(e.atime) });
         };
-        p.batch.addPending(x.io, pending, .replace) catch unreachable; // unreachable: `room` made space
+        p.batch.addPending(x.io, pending, .replace); // `room` made space
         in_batch = true;
         p.pending_count += 1;
         x.added(x.walk.index);
@@ -302,7 +302,7 @@ const Extraction = struct {
         if (x.publish.last_dir) |last| if (std.mem.eql(u8, last, path)) return;
         try x.room();
         const owned = try x.dupe(if (path.len == 0) "." else path);
-        x.publish.batch.addDirPath(x.root.get(), owned) catch unreachable; // unreachable: `room` made space
+        x.publish.batch.addDirPath(x.root, owned); // `room` made space
         x.added(entry);
         x.publish.last_dir = owned;
     }
@@ -355,7 +355,7 @@ const Extraction = struct {
                 return error.UnsafeLink;
             };
             const split = splitPath(l.path);
-            const parent = (try x.dirOf(split.dir, true)).get();
+            const parent = try x.dirOf(split.dir, true);
             // Made durable with the batch, through its directory.
             _ = try airlock.symLink(x.io, parent, l.target, split.base, .{ .sync = .{ .level = .none } });
             try x.touch(split.dir, l.entry);
@@ -370,8 +370,8 @@ const Extraction = struct {
             const to = splitPath(l.path);
             // Room for both, so opening the second never closes the first.
             try x.reserve(depth(from.dir) + depth(to.dir));
-            const from_dir = (try x.dirOf(from.dir, false)).get();
-            const to_dir = (try x.dirOf(to.dir, true)).get();
+            const from_dir = try x.dirOf(from.dir, false);
+            const to_dir = try x.dirOf(to.dir, true);
             to_dir.deleteFile(x.io, to.base) catch |err| switch (err) {
                 error.FileNotFound => {},
                 else => |other| return other,
@@ -391,7 +391,7 @@ const Extraction = struct {
             i -= 1;
             const d = x.dirs.items[i];
             const split = splitPath(d.path);
-            const parent = (try x.dirOf(split.dir, true)).get();
+            const parent = try x.dirOf(split.dir, true);
             if (builtin.os.tag != .windows) try parent.setFilePermissions(x.io, split.base, permissions(x.dirMode(d.mode)), .{ .follow_symlinks = false });
             if (x.options.times) if (d.mtime) |t| {
                 try parent.setTimestamps(x.io, split.base, .{ .follow_symlinks = false, .modify_timestamp = .{ .new = t } });
@@ -405,12 +405,12 @@ const Extraction = struct {
     /// never through a link: a component that is a link, or a file, is
     /// `error.ThroughLink`. Every directory opened stays in `opened`, which
     /// closes it: the caller is lent it.
-    fn dirOf(x: *Extraction, path: []const u8, create: bool) Error!aegis.own.Lent(Io.Dir) {
+    fn dirOf(x: *Extraction, path: []const u8, create: bool) Error!Io.Dir {
         if (path.len == 0) return x.root;
-        if (x.opened.get(path)) |d| return .{ .data = d };
+        if (x.opened.get(path)) |d| return d;
         try x.reserve(depth(path));
         // The nearest ancestor already open.
-        var d = x.root.get();
+        var d = x.root;
         var pos: usize = 0;
         var end = path.len;
         while (std.mem.findScalarLast(u8, path[0..end], '/')) |slash| : (end = slash) {
@@ -442,7 +442,7 @@ const Extraction = struct {
             d = next;
             pos += part.len + 1;
         }
-        return .{ .data = d };
+        return d;
     }
 
     /// Room in `opened` for `n` more directories: when there is none,

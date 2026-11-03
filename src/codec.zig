@@ -4,6 +4,7 @@
 const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
+const aegis = @import("aegis");
 const warp = @import("warp");
 const Limits = @import("Limits.zig");
 
@@ -98,7 +99,7 @@ pub const Decoder = struct {
             .deflate => {
                 const inflate: warp.Inflate.Options = .{ .accept = .raw, .window_bits = 15 };
                 d.buffer = try gpa.alignedAlloc(u8, .@"4", (1 << 15) + read_len);
-                d.state = .{ .deflate = .init(input, d.buffer, inflate) };
+                d.state = .{ .deflate = warp.Inflate.Reader.init(input, d.buffer, inflate) catch aegis.assert.never("raw DEFLATE's options are valid, and the buffer holds its window and a read") };
             },
             .deflate64 => {
                 // Zip method 9 and 7z's Deflate64 coder: DEFLATE's engine with
@@ -106,7 +107,7 @@ pub const Decoder = struct {
                 const inflate: warp.Inflate.Options = .{ .accept = .raw, .format = .deflate64 };
                 if (Limits.over(limits.window, inflate.windowLen())) return error.LimitExceeded;
                 d.buffer = try gpa.alignedAlloc(u8, .@"4", inflate.windowLen() + read_len);
-                d.state = .{ .deflate = .init(input, d.buffer, inflate) };
+                d.state = .{ .deflate = warp.Inflate.Reader.init(input, d.buffer, inflate) catch aegis.assert.never("raw Deflate64's options are valid, and the buffer holds its window and a read") };
             },
             .bzip2 => {
                 // The block's vector, the most a level-9 stream needs: bzip2
@@ -304,14 +305,18 @@ pub const Encoder = struct {
                 const level: u4 = @intCast(std.math.clamp(options.level orelse 6, 0, 12));
                 e.staging = try gpa.alloc(u8, 16 * 1024);
                 errdefer gpa.free(e.staging);
-                e.state = .{ .deflate = .{ .engine = try .init(gpa, .{ .level = level, .container = .raw }), .writer = undefined } };
-                e.state.deflate.writer = .init(&e.state.deflate.engine, output, e.staging);
+                const engine = warp.Deflate.init(gpa, .{ .level = level, .container = .raw }) catch |err| switch (err) {
+                    error.OutOfMemory => return error.OutOfMemory,
+                    error.InvalidOptions => aegis.assert.never("the default window and hash bits are valid"),
+                };
+                e.state = .{ .deflate = .{ .engine = engine, .writer = undefined } };
+                e.state.deflate.writer = warp.Deflate.Writer.init(&e.state.deflate.engine, output, e.staging) catch aegis.assert.never("the 16 KiB stage is past the writer's least");
             },
             .zstd => {
                 const level = std.math.clamp(options.level orelse warp.zstd.default_level, warp.zstd.min_level, warp.zstd.max_level);
                 e.staging = try gpa.alloc(u8, 16 * 1024);
                 errdefer gpa.free(e.staging);
-                const pledged: ?@import("aegis").units.Bytes(u64) = if (options.size) |n| .fromRaw(n) else null;
+                const pledged: ?aegis.units.Bytes(u64) = if (options.size) |n| .fromRaw(n) else null;
                 e.state = .{ .zstd = .{ .engine = try .init(gpa, .{ .level = level, .pledged_size = pledged }), .writer = undefined } };
                 e.state.zstd.writer = .init(&e.state.zstd.engine, output, e.staging);
             },
