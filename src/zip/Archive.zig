@@ -137,7 +137,7 @@ pub const Iterator = struct {
     pub fn next(it: *Iterator) ?Record {
         const a = it.archive;
         if (it.at == a.directory.len) return null;
-        var r = parseRecord(a.directory, &it.at, a.base) catch unreachable; // aegis: no-danger: open parsed every record of this directory, whose bytes the archive owns and nothing changes
+        var r = parseRecord(a.directory, &it.at, a.base) catch unreachable; // open parsed every record of this directory, whose bytes the archive owns and nothing changes
         if (r.cp437) {
             // `open` decoded them in this order.
             const start = if (it.cp437 == 0) 0 else a.cp437_ends[it.cp437 - 1];

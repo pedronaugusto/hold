@@ -22,7 +22,7 @@ pub fn appendCp437(gpa: std.mem.Allocator, out: *std.ArrayList(u8), bytes: []con
     defer out.* = w.toArrayList();
     _ = xenoglyph.encoding.decode(.cp437, bytes, &w.writer, .{ .bom = .none }) catch |e| return switch (e) {
         error.WriteFailed => error.OutOfMemory,
-        error.Malformed => unreachable, // aegis: no-danger: replacement mode writes U+FFFD for a malformed sequence and goes on, and code page 437 has none
+        error.Malformed => unreachable, // replacement mode writes U+FFFD for a malformed sequence and goes on, and code page 437 has none
     };
 }
 

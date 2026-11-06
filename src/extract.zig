@@ -314,6 +314,7 @@ const Extraction = struct {
         defer x.release();
         _ = p.batch.commit(x.io, .{ .level = x.options.level }) catch |err| {
             // The entry whose file failed, when its slot names one of the batch's.
+            // glint-ignore: Z026 -- a slot that names none of the batch's entries leaves the diagnostic unset; the commit's error is returned below
             if (p.batch.failure()) |f| if (f.slot.get(p.entries[0..p.used])) |entry| {
                 Diagnostic.set(x.options.diagnostic, entry.*, 0, .filesystem);
             } else |_| {};
