@@ -132,7 +132,7 @@ pub const Error = error{
 
 /// The filesystem's errors, from the calls extraction makes.
 pub const FsError = airlock.CreateError || airlock.Batch.Error || airlock.SymLinkError || Io.Dir.OpenError || Io.Dir.CreateDirError ||
-    Io.Dir.HardLinkError || Io.Dir.DeleteFileError || Io.Dir.SetTimestampsError || Io.Dir.SetFilePermissionsError || Io.File.WritePositionalError || Io.Writer.Error;
+    airlock.HardLinkError || Io.Dir.DeleteFileError || Io.Dir.SetTimestampsError || Io.Dir.SetFilePermissionsError || Io.File.WritePositionalError || Io.Writer.Error;
 
 /// How many files and directories one airlock batch makes durable
 /// together. Each file's temp and parent stay open until its batch
@@ -405,7 +405,7 @@ const Extraction = struct {
                 error.FileNotFound => {},
                 else => |other| return other,
             };
-            try from_dir.hardLink(from.base, to_dir, to.base, x.io, .{ .follow_symlinks = false });
+            try airlock.hardLink(x.io, from_dir, from.base, to_dir, to.base);
             try x.touch(to.dir, l.entry);
             x.summary.links += 1;
         }

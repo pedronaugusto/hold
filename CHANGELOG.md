@@ -18,6 +18,7 @@ follow [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Hard links on Windows: extraction makes them through airlock's `hardLink` (NTFS and ReFS keep them). A filesystem with none fails with `error.HardLinksUnsupported`.
 - 7z coders LZMA (030101), LZMA2 (21), bzip2 (040202), Delta (03) and the
   branch converters for x86, PowerPC, IA-64, ARM, ARM Thumb, SPARC, ARM64
   and RISC-V, through warp's LZMA, bzip2 and xz filter readers: 7-Zip's

@@ -25,10 +25,22 @@ fn readFile(dir: std.Io.Dir, path: []const u8, buf: []u8) ![]u8 {
     return dir.readFile(std.testing.io, path, buf);
 }
 
+/// Whether this account may make symbolic links: Windows' takes a right that
+/// not every account holds.
+fn linksAllowed(dir: std.Io.Dir) !bool {
+    dir.symLink(std.testing.io, "nowhere", "probe-link", .{}) catch |err| switch (err) {
+        error.PermissionDenied, error.AccessDenied => return false,
+        else => |e| return e,
+    };
+    try dir.deleteFile(std.testing.io, "probe-link");
+    return true;
+}
+
 test "a tree extracts: files, directories, links, times and modes" {
     const gpa = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
+    if (!try linksAllowed(tmp.dir)) return error.SkipZigTest;
     const t = hold.Entry.seconds(1_600_000_000);
     const archive = try tarOf(gpa, &.{
         .{ .entry = .{ .name = "d/", .kind = .directory, .mode = 0o755, .mtime = t } },
@@ -89,14 +101,14 @@ test "a write through a symbolic link is refused, the archive's or the destinati
     const gpa = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    if (@import("builtin").os.tag == .windows) return error.SkipZigTest;
+    if (!try linksAllowed(tmp.dir)) return error.SkipZigTest;
     try tmp.dir.createDirPath(std.testing.io, "dest");
     try tmp.dir.createDirPath(std.testing.io, "outside");
     const dest = try tmp.dir.openDir(std.testing.io, "dest", .{});
     defer dest.close(std.testing.io);
     // The destination already holds a link out (the npm tar CVE-2021-32803
     // shape): a file under it must not land outside.
-    try dest.symLink(std.testing.io, "../outside", "escape", .{});
+    try dest.symLink(std.testing.io, "../outside", "escape", .{ .is_directory = true });
     const archive = try tarOf(gpa, &.{.{ .entry = .{ .name = "escape/f" }, .contents = "x" }});
     defer gpa.free(archive);
     try std.testing.expectError(error.ThroughLink, extractTar(dest, archive, .{}));
@@ -272,7 +284,7 @@ test "in place, the fast mode: each file under its own name, a later entry of a 
     try tmp.dir.createDirPath(io, "outside");
     const dest = try tmp.dir.openDir(io, "dest", .{});
     defer dest.close(io);
-    const links = @import("builtin").os.tag != .windows;
+    const links = try linksAllowed(dest);
     // The destination holds a link out at a file's name.
     if (links) try dest.symLink(io, "../outside/f", "f", .{});
     const archive = try tarOf(gpa, &.{
