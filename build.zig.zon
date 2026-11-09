@@ -25,8 +25,8 @@
         },
 
         .airlock = .{
-            .url = "git+https://github.com/pedronaugusto/airlock#55f0265ad74ceff3ea14a1fca316f82aa3f45ae8",
-            .hash = "airlock-0.6.0-rfvu6DdECADPsZW3JjI6jPRt-hpplrgrRaA4M4Ey7e8W",
+            .url = "git+https://github.com/pedronaugusto/airlock#0f9e91526b1c9dbe5193bb6ae3e127057a6d2961",
+            .hash = "airlock-0.6.0-rfvu6ApsCAA0DHgkbjaviDMWCgIXXdIcXeOhIV4nlwP-",
         },
 
         .xenoglyph = .{

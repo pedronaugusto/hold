@@ -65,6 +65,7 @@ follow [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- On Windows: the fast in-place mode no longer writes through a link at a file's name (airlock's exclusive create), a parent that is a link is `ThroughLink` as on POSIX, junctions too, and directories' times are set through airlock, where std's call panics.
 - A header met mid-stream that asks more history than `Limits.window` (a
   later zstd frame's, an xz block's) is `error.LimitExceeded`, and the
   memory for its window `error.OutOfMemory`, where both read as

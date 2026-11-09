@@ -423,7 +423,7 @@ const Extraction = struct {
             const parent = try x.dirOf(split.dir, true);
             if (builtin.os.tag != .windows) try parent.setFilePermissions(x.io, split.base, permissions(x.dirMode(d.mode)), .{ .follow_symlinks = false });
             if (x.options.times) if (d.mtime) |t| {
-                try parent.setTimestamps(x.io, split.base, .{ .follow_symlinks = false, .modify_timestamp = .{ .new = t } });
+                try airlock.setTimes(x.io, parent, split.base, .{ .modify_timestamp = .{ .new = t } });
             };
             try x.touch(d.path, d.entry);
         }
@@ -451,7 +451,7 @@ const Extraction = struct {
         }
         var it = std.mem.splitScalar(u8, path[pos..], '/');
         while (it.next()) |part| {
-            const next = d.openDir(x.io, part, .{ .follow_symlinks = false }) catch |err| switch (err) {
+            const next = x.openReal(d, part) catch |err| switch (err) {
                 error.FileNotFound => blk: {
                     if (!create) return err;
                     d.createDir(x.io, part, permissions(0o755)) catch |c| switch (c) {
@@ -460,7 +460,7 @@ const Extraction = struct {
                     };
                     // The directory it was made in gained a name.
                     try x.touch(if (pos == 0) "" else path[0 .. pos - 1], x.walk.index);
-                    break :blk d.openDir(x.io, part, .{ .follow_symlinks = false }) catch |again| return through(again);
+                    break :blk x.openReal(d, part) catch |again| return through(again);
                 },
                 else => |other| return through(other),
             };
@@ -472,6 +472,16 @@ const Extraction = struct {
             pos += part.len + 1;
         }
         return d;
+    }
+
+    /// The directory `part` of `d`, never a link. POSIX refuses one at the open; Windows opens
+    /// the link itself, which a create under it finds empty, so what it opened is asked.
+    fn openReal(x: *Extraction, d: Io.Dir, part: []const u8) OpenRealError!Io.Dir {
+        const next = try d.openDir(x.io, part, .{ .follow_symlinks = false });
+        if (builtin.os.tag != .windows) return next;
+        errdefer next.close(x.io);
+        if ((try airlock.stat(x.io, next, "", .{})).kind == .sym_link) return error.NotDir;
+        return next;
     }
 
     /// Room in `opened` for `n` more directories: when there is none,
@@ -507,7 +517,9 @@ fn writeError(cause: ?anyerror) Error {
 }
 
 /// A link or a file where a directory was wanted.
-fn through(err: Io.Dir.OpenError) Error {
+const OpenRealError = Io.Dir.OpenError || airlock.StatError;
+
+fn through(err: OpenRealError) Error {
     return switch (err) {
         error.SymLinkLoop, error.NotDir => error.ThroughLink,
         else => |other| other,
