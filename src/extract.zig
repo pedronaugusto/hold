@@ -657,6 +657,7 @@ const Walk = struct {
             .sevenz => |a| if (a.err()) |e| return switch (e) {
                 error.Truncated => error.Truncated,
                 error.WrongPassword => error.WrongPassword,
+                error.Canceled => error.Canceled,
                 error.LimitExceeded => error.LimitExceeded,
                 error.OutOfMemory => error.OutOfMemory,
                 else => error.Corrupt,
@@ -710,6 +711,7 @@ fn mapSevenz(err: SevenzArchive.ContentsError) Error {
         error.LimitExceeded => error.LimitExceeded,
         error.Corrupt => error.Corrupt,
         error.Truncated => error.Truncated,
+        error.Canceled => error.Canceled,
         error.ReadFailed => error.ReadFailed,
         error.OutOfMemory => error.OutOfMemory,
     };

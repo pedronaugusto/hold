@@ -111,6 +111,8 @@ pub const OpenError = error{
     /// The header or the entries past `Options.limits`.
     LimitExceeded,
     Truncated,
+    /// A read of an encoded header's packed stream was canceled.
+    Canceled,
     ReadFailed,
     OutOfMemory,
 };
@@ -214,6 +216,7 @@ fn decodeHeader(a: *Archive, s: *const header.Streams, at: u64) OpenError![]cons
         error.ReadFailed => return switch (c.failure(&whole)) {
             error.Truncated => a.fail(at, .truncated, error.Truncated),
             error.WrongPassword => a.fail(at, .authentication, error.WrongPassword),
+            error.Canceled => error.Canceled,
             error.ReadFailed => error.ReadFailed,
             else => a.fail(at, .codec, error.Corrupt),
         },
@@ -231,6 +234,7 @@ fn openError(a: *const Archive, e: Cursor.FolderError, at: u64) OpenError {
         error.PasswordRequired => a.fail(at, .password_required, error.PasswordRequired),
         error.Invalid => a.fail(at, .header_field, error.Invalid),
         error.LimitExceeded => a.fail(at, .window_limit, error.LimitExceeded),
+        error.Canceled => error.Canceled,
         error.ReadFailed => error.ReadFailed,
         error.OutOfMemory => error.OutOfMemory,
     };
@@ -346,6 +350,8 @@ pub const ContentsError = error{
     /// `err()` says how.
     Corrupt,
     Truncated,
+    /// A read of the folder's packed streams was canceled.
+    Canceled,
     ReadFailed,
     OutOfMemory,
 };
@@ -355,6 +361,9 @@ pub const Error = Checked.Error || Bounded.Error || aes.Error || codec.Decoder.F
     /// An encrypted folder's stream fails: the password is wrong, or the
     /// stream is corrupt. 7z's AES carries no MAC to tell the two apart.
     WrongPassword,
+    /// A read of a packed stream was canceled. Each is read by a reader of
+    /// its own, not the archive's, so the cancel is told here.
+    Canceled,
 };
 
 /// `Error`, or `ReadFailed` for the archive's input.
@@ -379,7 +388,7 @@ pub fn contents(a: *Archive, item: Item, buffer: []u8) ContentsError!*Io.Reader 
         c.open(a, &a.streams, a.pack_starts, folder) catch |e| return a.contentsOpenError(e, item);
     }
     const f = &a.streams.folders[folder];
-    c.skipTo(&a.streams, f, item.stream) catch return a.failEntry(item, .codec, error.Corrupt);
+    c.skipTo(&a.streams, f, item.stream) catch return if (c.canceled()) error.Canceled else a.failEntry(item, .codec, error.Corrupt);
     const last = item.stream + 1 == f.streams;
     c.entry = if (last) .init(c.out, item.entry.size, item.crc, buffer) else .initPart(c.out, item.entry.size, item.crc, buffer);
     c.entry_open = true;
@@ -413,6 +422,7 @@ fn contentsOpenError(a: *Archive, e: Cursor.FolderError, item: Item) ContentsErr
         error.PasswordRequired => a.failEntry(item, .password_required, error.PasswordRequired),
         error.Invalid => a.failEntry(item, .header_field, error.Invalid),
         error.LimitExceeded => a.failEntry(item, .window_limit, error.LimitExceeded),
+        error.Canceled => error.Canceled,
         error.ReadFailed => error.ReadFailed,
         error.OutOfMemory => error.OutOfMemory,
     };
@@ -463,7 +473,7 @@ const Cursor = struct {
     /// A stream a coder reads, and its length.
     const Input = struct { reader: *Io.Reader, len: u64 };
 
-    const FolderError = error{ Invalid, UnsupportedMethod, UnsupportedEncryption, PasswordRequired, LimitExceeded, ReadFailed, OutOfMemory };
+    const FolderError = error{ Invalid, UnsupportedMethod, UnsupportedEncryption, PasswordRequired, LimitExceeded, Canceled, ReadFailed, OutOfMemory };
 
     /// Whether the output is at or before substream `k` of `folder`, and
     /// nothing in the folder failed.
@@ -485,7 +495,8 @@ const Cursor = struct {
         for (f.coders) |cd| if (cd.id == coder.bcj2 and cd.ins != 4) return error.Invalid;
         errdefer c.close();
         const main = f.mainOut();
-        const top = try c.output(a, s, starts, f, main, 0);
+        // A decoder that reads its input as it starts, canceled there.
+        const top = c.output(a, s, starts, f, main, 0) catch |e| return if (c.canceled()) error.Canceled else e;
         c.out = top.reader;
         c.folder = index;
     }
@@ -621,6 +632,8 @@ const Cursor = struct {
     /// What failed behind a `ReadFailed` of `top`, a reader over `out`;
     /// `ReadFailed` when nothing of the folder did.
     fn failure(c: *const Cursor, top: ?*const Checked) Failure {
+        // First: a cancel is the cause of whatever failed above it.
+        if (c.canceled()) return error.Canceled;
         for (c.packs[0..c.packs_len]) |*p| if (p.bounded.failure) |e| return e;
         var i: usize = 0;
         while (i < c.len) : (i += 1) {
@@ -636,6 +649,13 @@ const Cursor = struct {
         }
         if (top) |t| if (t.failure) |e| return if (c.encrypted) error.WrongPassword else e;
         return error.ReadFailed;
+    }
+
+    /// Whether a packed stream's own reader was canceled, which the readers
+    /// over it give only as `ReadFailed`.
+    fn canceled(c: *const Cursor) bool {
+        for (c.packs[0..c.packs_len]) |*p| if (p.view.err()) |e| if (e == error.Canceled) return true;
+        return false;
     }
 
     fn close(c: *Cursor) void {

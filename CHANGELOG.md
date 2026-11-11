@@ -15,6 +15,11 @@ follow [Semantic Versioning](https://semver.org/).
   is UTF-8, and another host's name that is not is `.unspecified` bytes.
 - `zip.Record.made_by` is null for a record read forward, where a local
   header names no host.
+- A cancel inside a 7z packed stream's reader, which is not the archive's
+  reader, is `error.Canceled` where it was `ReadFailed` (or `Corrupt`):
+  `sevenz.Archive.Error`, `ContentsError` and `OpenError` gain `Canceled`,
+  `err()` returns it, and `extract` ends with it. `Source.View` is a
+  tagged union with `err()`, the file reader's own error.
 
 ### Added
 

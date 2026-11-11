@@ -2,6 +2,7 @@
 //! the published shapes among them.
 const std = @import("std");
 const hold = @import("../hold.zig");
+const shakedown = @import("shakedown");
 
 const Item = struct { entry: hold.Entry, contents: []const u8 = "" };
 
@@ -240,6 +241,47 @@ test "a 7z extracts, its solid folder read once in order" {
     var buf: [64]u8 = undefined;
     try std.testing.expectEqualStrings("hello\n", try readFile(tmp.dir, "dir/a.txt", &buf));
     try std.testing.expectEqualStrings("hello\n", try readFile(tmp.dir, "link", &buf));
+}
+
+test "a cancel inside a 7z packed stream's own reader ends the extraction as Canceled, its file discarded" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    const testdata = @import("testdata");
+    const bytes = for (testdata.sevenz) |c| {
+        if (std.mem.eql(u8, c.name, "sevenz/7zz-deflate.7z")) break c.archive;
+    } else unreachable; // unreachable: the index has it
+    var src = std.testing.tmpDir(.{});
+    defer src.cleanup();
+    try src.dir.writeFile(io, .{ .sub_path = "a.7z", .data = bytes });
+    const file = try src.dir.openFile(io, "a.7z", .{});
+    defer file.close(io);
+    // The archive's reads go through `fio`; the extraction's own through
+    // `io`, so the cancel lands only on a read of the packed stream.
+    const fio = try shakedown.FaultIo.init(gpa, io, .{});
+    defer fio.deinit();
+    var file_buffer: [4096]u8 = undefined;
+    var fr = file.reader(fio.io(), &file_buffer);
+    var archive = try hold.sevenz.Archive.open(gpa, .{ .file = &fr }, .{});
+    defer archive.deinit();
+    // The header is read; the next positional read is a packed stream's,
+    // through a reader of its own, not `fr`.
+    try fio.setPlan(&.{.{ .at = .{ .nth = .{ .call = .fileReadPositional, .n = 1 } }, .fault = .cancel }});
+    try std.testing.expectError(error.Canceled, hold.extract(io, gpa, tmp.dir, .{ .sevenz = &archive }, .{ .level = .data }));
+    try std.testing.expectEqual(@as(usize, 1), fio.fired().len);
+    try std.testing.expectEqual(@as(?std.Io.File.Reader.Error, null), fr.err);
+    // Nothing published and no temp left behind: the directory made for
+    // the first file is all there is.
+    var it = tmp.dir.iterate();
+    while (try it.next(io)) |e| {
+        try std.testing.expectEqualStrings("dir", e.name);
+        try std.testing.expectEqual(std.Io.File.Kind.directory, e.kind);
+        var d = try tmp.dir.openDir(io, "dir", .{ .iterate = true });
+        defer d.close(io);
+        var inside = d.iterate();
+        try std.testing.expectEqual(@as(?std.Io.Dir.Entry, null), try inside.next(io));
+    }
 }
 
 test "more directories than stay open: each still extracts, links across them too" {
