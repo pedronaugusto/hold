@@ -1,6 +1,7 @@
 //! The 512-byte tar header: its fields' places in every dialect, numbers
 //! in octal and base-256, and the checksum.
 const std = @import("std");
+const aegis = @import("aegis");
 
 pub const block_len = 512;
 pub const Block = [block_len]u8;
@@ -115,7 +116,7 @@ pub fn fitsOctal(len: usize, value: u64) bool {
 
 /// `value` as zero-padded octal digits and a NUL, filling the field.
 pub fn putOctal(field: []u8, value: u64) void {
-    std.debug.assert(fitsOctal(field.len, value));
+    aegis.assert.invariant(fitsOctal(field.len, value), "the value fits the field's octal digits");
     var v = value;
     var i = field.len - 1;
     field[i] = 0;

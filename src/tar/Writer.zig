@@ -10,6 +10,7 @@
 const Writer = @This();
 
 const std = @import("std");
+const aegis = @import("aegis");
 const Io = std.Io;
 const header = @import("header.zig");
 const pax = @import("pax.zig");
@@ -94,7 +95,7 @@ pub const FinishError = EndError || error{EntryOpen};
 
 /// `buffer` stages the contents; any length works.
 pub fn init(output: *Io.Writer, buffer: []u8, options: Options) Writer {
-    std.debug.assert(options.blocking_factor != 0);
+    aegis.assert.invariant(options.blocking_factor != 0, "a blocking factor of zero blocks is a mistake");
     return .{ .output = output, .options = options, .interface = .{ .vtable = &vtable, .buffer = buffer } };
 }
 
@@ -103,7 +104,7 @@ pub fn init(output: *Io.Writer, buffer: []u8, options: Options) Writer {
 /// them for a file or a hard link that carries data.
 pub fn begin(w: *Writer, h: Header) BeginError!void {
     if (w.open) return error.EntryOpen;
-    std.debug.assert(!w.finished);
+    aegis.assert.invariant(!w.finished, "no entry begins after finish");
     const e = h.entry;
     if (e.kind == .other) return error.Unrepresentable;
     if (std.mem.findScalar(u8, e.name, 0) != null or std.mem.findScalar(u8, e.link, 0) != null) return error.Unrepresentable;
@@ -279,7 +280,7 @@ fn draftNames(w: *Writer, d: *Draft, h: Header) BeginError!void {
 
 /// Ends the current entry: its contents must all have been written.
 pub fn end(w: *Writer) EndError!void {
-    std.debug.assert(w.open);
+    aegis.assert.invariant(w.open, "end ends an open entry");
     try w.drainStaged();
     if (w.left != 0) return error.TooShort;
     try w.zeros(w.pad);
@@ -298,7 +299,7 @@ pub fn add(w: *Writer, h: Header, bytes: []const u8) (BeginError || EndError || 
 
 /// The current entry's contents.
 pub fn contents(w: *Writer) *Io.Writer {
-    std.debug.assert(w.open);
+    aegis.assert.invariant(w.open, "contents are an open entry's");
     return &w.interface;
 }
 
@@ -321,7 +322,7 @@ pub fn global(w: *Writer, h: Header) BeginError!void {
 /// Ends the archive: two zero blocks, padded to the blocking factor.
 pub fn finish(w: *Writer) FinishError!void {
     if (w.open) return error.EntryOpen;
-    std.debug.assert(!w.finished);
+    aegis.assert.invariant(!w.finished, "an archive is finished once");
     try w.zeros(2 * header.block_len);
     const record_len = @as(u64, w.options.blocking_factor) * header.block_len;
     try w.zeros((record_len - w.written % record_len) % record_len);

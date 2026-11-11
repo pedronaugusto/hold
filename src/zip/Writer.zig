@@ -11,6 +11,7 @@
 const Writer = @This();
 
 const std = @import("std");
+const aegis = @import("aegis");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const warp = @import("warp");
@@ -256,7 +257,7 @@ pub fn end(w: *Writer) EndError!void {
 /// Writes the central directory and the end records.
 pub fn finish(w: *Writer, comment: []const u8) (EndError || error{EntryOpen})!void {
     if (w.current != null) return error.EntryOpen;
-    std.debug.assert(!w.finished);
+    aegis.assert.invariant(!w.finished, "an archive is finished once");
     if (comment.len > 0xffff) return error.TooLarge;
     const dir_offset = w.offset;
     try w.output.writeAll(w.directory.items);
@@ -350,7 +351,7 @@ fn defaultExternal(e: Entry) u32 {
 /// gives the CRC and sizes (in memory, or raw).
 fn start(w: *Writer, h: Header, raw_info: ?Raw, known_in: ?Raw) BeginError!void {
     if (w.current != null) return error.EntryOpen;
-    std.debug.assert(!w.finished);
+    aegis.assert.invariant(!w.finished, "no entry begins after finish");
     const e = h.entry;
     if (e.name.len > 0xffff or h.comment.len > 0xffff) return error.TooLarge;
     const known = known_in orelse raw_info;
