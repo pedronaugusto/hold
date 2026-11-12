@@ -80,7 +80,7 @@ pub fn dev(b: *std.Build, tools: type) void {
         // where `bay test` runs each row once.
         .bench = .{
             .programs = &.{.{ .name = "hold-bench", .source = "bench/main.zig" }},
-            .imports = benchImports,
+            .imports = tools.preflight.Bench.importsFrom(benchImports),
             .target = target,
             .optimize = optimize,
         },

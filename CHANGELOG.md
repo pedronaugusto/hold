@@ -47,6 +47,7 @@ follow [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Pins aegis c8982a8, still 0.2.4: six additive commits after 3c0b13e (the role declarations a linter reads, `lint_rules`), the aegis the development build's preflight selects. Nothing hold calls changed.
 - The README states hold's stability policy (0.x, tracking Zig 0.17.x; a breaking change only in a minor release, with its CHANGELOG entry; a patch release never breaks), where it said work was in progress.
 - The writers' contracts left on `std.debug.assert` (tar's octal field, blocking factor, open entry and finish; zip's finish) are `aegis.assert.invariant`: they hold in every build, where they were undefined behaviour in ReleaseFast.
 - aegis 0.3, which has one way to lend: an extraction holds the caller's directory, and lends the ones it opens, as the `std.Io.Dir` itself, never closing the caller's. On airlock's reflink-lock line a pending's file is the `std.Io.File` and a batch's adds take the room `room` made, with no error. Pins aegis breaking-0.3 (7bdb587), and warp, airlock (reflink-lock), xenoglyph and shakedown on it.
