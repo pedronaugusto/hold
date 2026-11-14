@@ -431,8 +431,9 @@ fn contentsOpenError(a: *Archive, e: Cursor.FolderError, item: Item) ContentsErr
 /// A folder's decoders, from its packed streams to its output, and the
 /// entry being read from it. A coder's in-stream is another's output or a
 /// packed stream; each packed stream is read by a reader of its own, so
-/// BCJ2's four are read side by side.
-const Cursor = struct {
+/// BCJ2's four are read side by side. The type of an archive's private
+/// `cursor`.
+pub const Cursor = struct {
     folder: ?u32 = null,
     /// The next substream the output is at.
     next: u32 = 0,
@@ -447,14 +448,16 @@ const Cursor = struct {
     key: aegis.Secret([32]u8) = .init(@splat(0)),
     encrypted: bool = false,
 
-    const Pack = struct {
+    /// A packed stream's reader.
+    pub const Pack = struct {
         view: Source.View,
         file_buffer: [4096]u8,
         bounded: Bounded,
         buffer: [16 * 1024]u8,
     };
 
-    const Stage = struct {
+    /// One coder of the folder's chain.
+    pub const Stage = struct {
         decoder: union(enum) { codec: codec.Decoder, aes: aes.Reader, bcj2: warp.Bcj2 },
         checked: Checked,
         buffer: [16 * 1024]u8,

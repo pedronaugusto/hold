@@ -109,7 +109,8 @@ front: Io.Writer,
 failure: ?ContentsError = null,
 finished: bool = false,
 
-const Current = struct {
+/// The entry being written: the type of a writer's private `current`.
+pub const Current = struct {
     header: Header,
     method: Method,
     flags: u16,

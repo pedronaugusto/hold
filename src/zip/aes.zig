@@ -80,7 +80,7 @@ pub const Reader = struct {
         var keys = aegis.Secret([2 * 32 + verifier_len]u8).init(undefined);
         defer keys.deinit();
         const k = keys.exposeMut()[0 .. 2 * key_len + verifier_len];
-        crypto.pwhash.pbkdf2(k, password.expose(), s, 1000, HmacSha1) catch unreachable; // 1,000 rounds and at most 66 bytes are within PBKDF2's bounds, whatever the archive says
+        crypto.pwhash.pbkdf2(k, password.expose(), s, 1000, HmacSha1) catch aegis.assert.never("1,000 rounds and at most 66 bytes are within PBKDF2's bounds, whatever the archive says");
         if (!aegis.secret.equal(verifier_len, k[2 * key_len ..][0..verifier_len], &verifier).declassify("the verifier's verdict is the format's own answer to the password")) return error.WrongPassword;
         r.* = .{
             .interface = .{ .vtable = &vtable, .buffer = &.{}, .seek = 0, .end = 0 },

@@ -1,6 +1,7 @@
 //! pax extended header records (POSIX.1-2001): "<length> <key>=<value>\n",
 //! the length counting the whole record, its own digits included.
 const std = @import("std");
+const aegis = @import("aegis");
 const Io = std.Io;
 const time = @import("../time.zig");
 
@@ -80,13 +81,13 @@ pub fn formatTime(t: Io.Timestamp, buffer: *[40]u8) []const u8 {
     const sign = if (p.negative) "-" else "";
     const secs = p.whole;
     var frac = p.nanos;
-    if (frac == 0) return std.mem.print(buffer, "{s}{d}", .{ sign, secs }) catch unreachable; // 40 bytes hold any i96 time: a sign, 20 digits of seconds and ten of the fraction
+    if (frac == 0) return std.mem.print(buffer, "{s}{d}", .{ sign, secs }) catch aegis.assert.never("40 bytes hold any i96 time: a sign, 20 digits of seconds and ten of the fraction");
     var digits: usize = 9;
     while (frac % 10 == 0) {
         frac /= 10;
         digits -= 1;
     }
-    return std.mem.print(buffer, "{s}{d}.{d:0>[3]}", .{ sign, secs, frac, digits }) catch unreachable; // 40 bytes hold any i96 time: a sign, 20 digits of seconds and ten of the fraction
+    return std.mem.print(buffer, "{s}{d}.{d:0>[3]}", .{ sign, secs, frac, digits }) catch aegis.assert.never("40 bytes hold any i96 time: a sign, 20 digits of seconds and ten of the fraction");
 }
 
 test Iterator {

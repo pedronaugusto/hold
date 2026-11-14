@@ -11,6 +11,7 @@
 const Reader = @This();
 
 const std = @import("std");
+const aegis = @import("aegis");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const header = @import("header.zig");
@@ -199,8 +200,8 @@ pub const Records = struct {
 
     pub fn next(it: *Records) ?pax.Record {
         // Both were checked when they were read.
-        if (it.local.next() catch unreachable) |rec| return rec; // unreachable: checked by checkRecords
-        return it.global.next() catch unreachable; // unreachable: re-encoded by mergeGlobal
+        if (it.local.next() catch aegis.assert.never("checked by checkRecords")) |rec| return rec;
+        return it.global.next() catch aegis.assert.never("re-encoded by mergeGlobal");
     }
 };
 
@@ -272,11 +273,11 @@ fn mergeGlobal(r: *Reader, data: []const u8) NextError!void {
     var merged: Io.Writer.Allocating = .init(r.gpa);
     defer merged.deinit();
     var old: pax.Iterator = .{ .data = r.global.items };
-    while (old.next() catch unreachable) |rec| { // unreachable: re-encoded here
+    while (old.next() catch aegis.assert.never("re-encoded here")) |rec| {
         if (find(data, rec.key) == null) pax.write(&merged.writer, rec.key, rec.value) catch return error.OutOfMemory;
     }
     var new: pax.Iterator = .{ .data = data };
-    while (new.next() catch unreachable) |rec| { // unreachable: checked by checkRecords
+    while (new.next() catch aegis.assert.never("checked by checkRecords")) |rec| {
         if (rec.value.len != 0 and std.mem.eql(u8, find(data, rec.key).?, rec.value))
             pax.write(&merged.writer, rec.key, rec.value) catch return error.OutOfMemory;
     }
@@ -632,8 +633,9 @@ pub const ContentsError = error{
     Truncated,
 };
 
-/// The current entry's contents, as a `std.Io.Reader`.
-const Contents = struct {
+/// The current entry's contents, as a `std.Io.Reader`: the type of a
+/// reader's private `reader`.
+pub const Contents = struct {
     interface: Io.Reader,
     input: *Io.Reader = undefined,
     owner: *Reader = undefined,

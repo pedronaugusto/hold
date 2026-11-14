@@ -8,7 +8,12 @@ follow [Semantic Versioning](https://semver.org/).
 
 ### Breaking
 
-- `Entry.Encoding` has no `cp437`: a zip name an MS-DOS host wrote in code
+- `Extract.FsError`, and so `Extract.Error` and `Extract.extract`, hold `airlock.HardLinkError` where they held `std.Io.Dir.HardLinkError`: hard links are made through airlock.
+- `sevenz.Archive.ContentsError`, `sevenz.Archive.OpenError`, `sevenz.Archive.contents`, `sevenz.Archive.open` and `sevenz.Archive.err` carry `Canceled`, and a decoder's `LimitExceeded` and `OutOfMemory`, as the entries below and under Fixed say.
+- `zip.Archive.Contents.Error`, `zip.Archive.Contents.err`, `zip.Stream.ContentsError` and `zip.Stream.err` hold `codec.Decoder.Failure` (`CorruptStream`, `LimitExceeded`, `OutOfMemory`) where they named `CorruptStream` alone, and the stream `LimitExceeded`.
+- `tar.Reader.local`, `tar.Reader.long_name` and `tar.Reader.long_link`, private, are slices where they were lists.
+- `sevenz.Archive.cursor`, `tar.Reader.reader`, `zip.Stream.contents_` and `zip.Writer.current`, private, are of the public types `sevenz.Archive.Cursor` (with its `Pack` and `Stage`), `tar.Reader.Contents`, `zip.Stream.Contents` and `zip.Writer.Current`, where those were private.
+- `Entry.Encoding` has no `cp437` (`Entry.Encoding.cp437`): a zip name an MS-DOS host wrote in code
   page 437 comes decoded to UTF-8 (through xenoglyph), as libarchive gives
   it; `zip.Record.raw_name` keeps the bytes and `zip.Record.cp437` says the
   name was decoded. A name without the UTF-8 flag that is well-formed UTF-8
@@ -46,6 +51,9 @@ follow [Semantic Versioning](https://semver.org/).
   reads them.
 
 ### Changed
+
+- Properties for the README's promises over generated archives: a tar of any entries reads back as written (names past ustar's fields, modes, links, times with a fraction); a zip reads back the same through its central directory and forward by every method it writes, the forward reader refusing exactly the stored entries written streamed; an extraction of hostile names and links writes nothing outside its directory and leaves no link there leading out. Each fails on a planted fault.
+- Pins aegis dc3ed602, still 0.2.4; development on preflight's ci-standard 412a7df and glint 0.8, and shakedown ed5a873. Traps are `aegis.assert.never`, with what they rely on; an extraction holds its root as an `Unowned` directory.
 
 - Pins aegis c8982a8, still 0.2.4: six additive commits after 3c0b13e (the role declarations a linter reads, `lint_rules`), the aegis the development build's preflight selects. Nothing hold calls changed.
 - The README states hold's stability policy (0.x, tracking Zig 0.17.x; a breaking change only in a minor release, with its CHANGELOG entry; a patch release never breaks), where it said work was in progress.

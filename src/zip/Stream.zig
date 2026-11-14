@@ -205,7 +205,8 @@ fn closeContents(s: *Stream) void {
     s.open = false;
 }
 
-const Contents = struct {
+/// An entry's contents and where they stand: the type of a stream's private `contents_`.
+pub const Contents = struct {
     interface: Io.Reader,
     owner: *Stream = undefined,
     bounded: Bounded = undefined,
