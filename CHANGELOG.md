@@ -28,6 +28,7 @@ follow [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Properties over crafted input: bytes made from zips and tars hold wrote, mutated (a byte changed, cut, extended; a zip's directory and end record fields and a tar header's size set to drawn values, its checksum written again), and read as a consumer reads them: a zip opened, listed and each entry's contents read; a tar's headers and contents read in turn. Each read succeeds within `Limits` or is refused with an error, an entry gives no more than its declared size, and no allocation passes what the limits allow. Among the zips, a central directory record whose name, extra and comment lengths pass 64 KiB together against a 46-byte directory, refused as `Invalid`. Each fails on a planted fault (the directory record's length check, the extension header's limit).
 - Hard links on Windows: extraction makes them through airlock's `hardLink` (NTFS and ReFS keep them). A filesystem with none fails with `error.HardLinksUnsupported`.
 - 7z coders LZMA (030101), LZMA2 (21), bzip2 (040202), Delta (03) and the
   branch converters for x86, PowerPC, IA-64, ARM, ARM Thumb, SPARC, ARM64
@@ -52,6 +53,7 @@ follow [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Development on preflight's ci-standard f991816 and shakedown 327bc61.
 - Properties for the README's promises over generated archives: a tar of any entries reads back as written (names past ustar's fields, modes, links, times with a fraction); a zip reads back the same through its central directory and forward by every method it writes, the forward reader refusing exactly the stored entries written streamed; an extraction of hostile names and links writes nothing outside its directory and leaves no link there leading out. Each fails on a planted fault.
 - Pins aegis dc3ed602, still 0.2.4; development on preflight's ci-standard 412a7df and glint 0.8, and shakedown ed5a873. Traps are `aegis.assert.never`, with what they rely on; an extraction holds its root as an `Unowned` directory.
 
