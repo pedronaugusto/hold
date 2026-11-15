@@ -53,6 +53,8 @@ follow [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Pins aegis f52eabe, still 0.2.4, and on it warp 4649084, airlock cd4c29a and xenoglyph ab4d381: the one aegis the family builds on. Development on preflight's ci-standard 158c176.
+- A failed commit's diagnostic names the entry whose slot failed by the slot's position among the batch's entries, where it asked for the entry and ignored the refusal.
 - Development on preflight's ci-standard f991816 and shakedown 327bc61.
 - Properties for the README's promises over generated archives: a tar of any entries reads back as written (names past ustar's fields, modes, links, times with a fraction); a zip reads back the same through its central directory and forward by every method it writes, the forward reader refusing exactly the stored entries written streamed; an extraction of hostile names and links writes nothing outside its directory and leaves no link there leading out. Each fails on a planted fault.
 - Pins aegis dc3ed602, still 0.2.4; development on preflight's ci-standard 412a7df and glint 0.8, and shakedown ed5a873. Traps are `aegis.assert.never`, with what they rely on; an extraction holds its root as an `Unowned` directory.

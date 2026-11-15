@@ -114,7 +114,7 @@ pub const Decoder = struct {
                 // The block's vector, the most a level-9 stream needs: bzip2
                 // keeps no history beyond its block.
                 d.buffer = try gpa.alignedAlloc(u8, .@"4", read_len + warp.bzip2.Decompress.memory);
-                d.state = .{ .bzip2 = .init(input, d.buffer, .{ .streams = if (options.self_terminated) .one else .all }) };
+                d.state = .{ .bzip2 = warp.bzip2.Decompress.Reader.init(input, d.buffer, .{ .streams = if (options.self_terminated) .one else .all }) catch aegis.assert.never("the buffer holds the reader's 4 KiB and the decoder's memory") };
             },
             .lzma => {
                 // Zip's LZMA: LZMA SDK's version (two bytes), the
