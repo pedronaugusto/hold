@@ -89,6 +89,10 @@ follow [Semantic Versioning](https://semver.org/).
   and `sevenz.Archive.Error` name them, and extraction reports them so.
 - `tar.Writer` writes a pax time of the most negative nanoseconds an
   `Io.Timestamp` holds, where taking its magnitude stopped a safe build.
+- A crafted zstd entry (zip method 93) no longer makes warp's decoder read
+  past the end of its output buffer: hold builds on warp main 79a4611
+  (GHSA-9r52-p7vw-225m; it crashed where the buffer ended at an unmapped
+  page, and nothing read reached the entry's bytes).
 
 ## [0.1.1] - 2026-10-25
 
