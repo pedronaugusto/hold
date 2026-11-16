@@ -53,6 +53,7 @@ follow [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Pins airlock 3ef2f54, where a directory's sync on FreeBSD reopens the path-only handle and syncs that: extraction's directory syncs failed there with EBADF. Development on shakedown c29751d.
 - Pins aegis f52eabe, still 0.2.4, and on it warp 4649084, airlock cd4c29a and xenoglyph ab4d381: the one aegis the family builds on. Development on preflight's ci-standard 158c176.
 - A failed commit's diagnostic names the entry whose slot failed by the slot's position among the batch's entries, where it asked for the entry and ignored the refusal.
 - Development on preflight's ci-standard f991816 and shakedown 327bc61.
