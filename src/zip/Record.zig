@@ -3,6 +3,7 @@
 //! Slices borrow from the reader that made it.
 const Record = @This();
 
+const aegis = @import("aegis");
 const Entry = @import("../Entry.zig");
 const format = @import("format.zig");
 const text = @import("../text.zig");
@@ -50,11 +51,42 @@ encryption: Encryption = .none,
 /// AES's strength (1, 2, 3) and version (1 for AE-1, 2 for AE-2).
 aes: ?format.Aes = null,
 
+/// The extra fields `describe` reads, each the first of its id.
+const Found = struct {
+    unicode_path: ?[]const u8 = null,
+    unix_ids: ?[]const u8 = null,
+    ntfs: ?[]const u8 = null,
+    unix_old: ?[]const u8 = null,
+    unix_time: ?[]const u8 = null,
+    aes: ?[]const u8 = null,
+
+    /// The block read once. Its readers refuse an entry whose block holds a
+    /// field cut short before they describe it, so every field is whole here.
+    fn of(extra: []const u8) Found {
+        var found: Found = .{};
+        var it: format.ExtraIterator = .{ .bytes = extra };
+        while (it.next() catch aegis.assert.never("the reader checked every extra field before describing the entry")) |field| {
+            const slot = switch (field.id) {
+                format.Extra.unicode_path => &found.unicode_path,
+                format.Extra.unix_ids => &found.unix_ids,
+                format.Extra.ntfs => &found.ntfs,
+                format.Extra.unix_old => &found.unix_old,
+                format.Extra.unix_time => &found.unix_time,
+                format.Extra.aes => &found.aes,
+                else => continue,
+            };
+            if (slot.* == null) slot.* = field.data;
+        }
+        return found;
+    }
+};
+
 /// The common entry's fields from a record's: name and encoding, kind,
 /// mode, owner and times.
 pub fn describe(r: *Record) void {
     const host: ?format.Host = if (r.made_by) |m| @fromBackingInt(@intCast(m >> 8)) else null;
     const e = &r.entry;
+    const found: Found = .of(r.extra);
     e.name = r.raw_name;
     // Without the UTF-8 flag APPNOTE says code page 437, which MS-DOS and
     // Windows writers mean; Info-ZIP and macOS write UTF-8 there, other
@@ -65,7 +97,7 @@ pub fn describe(r: *Record) void {
     const utf8 = r.flags & format.Flags.utf8 != 0 or text.validUtf8(r.raw_name);
     r.cp437 = !utf8 and host == .dos;
     e.encoding = if (utf8 or r.cp437) .utf8 else .unspecified;
-    if (format.findExtra(r.extra, format.Extra.unicode_path) catch null) |data| {
+    if (found.unicode_path) |data| {
         if (format.unicodePath(data, r.raw_name)) |name| {
             e.name = name;
             e.encoding = .utf8;
@@ -75,29 +107,29 @@ pub fn describe(r: *Record) void {
     const unix: ?u32 = if (host != null and host.?.unixMode() and r.external >> 16 != 0) r.external >> 16 else null;
     if (unix) |m| e.mode = m & 0o7777;
     e.kind = kindOf(unix, e.name, r.external);
-    if (format.findExtra(r.extra, format.Extra.unix_ids) catch null) |data| {
+    if (found.unix_ids) |data| {
         if (format.unixIds(data)) |ids| {
             e.uid = ids.uid;
             e.gid = ids.gid;
         }
     }
     e.mtime = format.fromDos(r.dos_date, r.dos_time);
-    if (format.findExtra(r.extra, format.Extra.ntfs) catch null) |data| {
+    if (found.ntfs) |data| {
         if (format.ntfsMtime(data)) |t| e.mtime = t;
     }
-    if (format.findExtra(r.extra, format.Extra.unix_old) catch null) |data| {
+    if (found.unix_old) |data| {
         if (format.unixOld(data)) |u| {
             e.mtime = Entry.seconds(u.mtime);
             e.atime = Entry.seconds(u.atime);
         }
     }
-    if (format.findExtra(r.extra, format.Extra.unix_time) catch null) |data| {
+    if (found.unix_time) |data| {
         if (format.unixMtime(data)) |s| e.mtime = Entry.seconds(s);
     }
     if (r.flags & format.Flags.encrypted != 0) {
         r.encryption = if (r.flags & format.Flags.strong_encryption != 0) .strong else .zipcrypto;
         if (@backingInt(r.method) == @backingInt(Method.aes)) {
-            if (format.findExtra(r.extra, format.Extra.aes) catch null) |data| {
+            if (found.aes) |data| {
                 if (format.Aes.parse(data)) |a| {
                     r.encryption = .aes;
                     r.aes = a;
