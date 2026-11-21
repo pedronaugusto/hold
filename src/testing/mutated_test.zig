@@ -110,7 +110,8 @@ fn zipOne(examples: []const []const u8, case: *shakedown.Case) anyerror!void {
     try zipRead(examples, case, counting.allocator());
     // Nothing is allocated past what the limits allow: the directory, a
     // codec's window, and the buffers around them.
-    try testing.expect(counting.peak_bytes <= limits.directory.raw() + limits.window.raw() + 256 * 1024);
+    const allowed = try (try limits.directory.add(limits.window)).add(.literal("256KiB"));
+    try testing.expect(allowed.compare(.fromRaw(counting.peak_bytes)) != .lt);
 }
 
 fn zipRead(examples: []const []const u8, case: *shakedown.Case, gpa: std.mem.Allocator) anyerror!void {
@@ -121,7 +122,7 @@ fn zipRead(examples: []const []const u8, case: *shakedown.Case, gpa: std.mem.All
         else => return e,
     };
     defer archive.deinit();
-    try testing.expect(archive.len() <= limits.entries.raw());
+    try testing.expect(limits.entries.compare(.fromRaw(archive.len())) != .lt);
     var listed: u64 = 0;
     var it = archive.iterate();
     while (it.next()) |r| {
@@ -229,8 +230,8 @@ fn tarRead(examples: []const []const u8, case: *shakedown.Case, gpa: std.mem.All
             else => return e,
         }) orelse return;
         // A header's name and link are bounded by the header limit.
-        try testing.expect(entry.name.len <= tar_limits.header.raw());
-        try testing.expect(entry.link.len <= tar_limits.header.raw());
+        try testing.expect(tar_limits.header.compare(.fromRaw(entry.name.len)) != .lt);
+        try testing.expect(tar_limits.header.compare(.fromRaw(entry.link.len)) != .lt);
         const got = drain(tr.contents()) catch |e| switch (e) {
             error.ReadFailed => {
                 try testing.expect(tr.err() != null);
