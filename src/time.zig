@@ -52,12 +52,12 @@ pub fn fromParts(negative: bool, whole: i64, nanos: u32) Io.Timestamp {
 
 /// `t` as pax writes it.
 pub fn parts(t: Io.Timestamp) Parts {
-    const ns = Nanoseconds.fromTimestamp(t, .exact).raw();
+    const instant = Nanoseconds.fromTimestamp(t, .exact);
     // The most negative time's magnitude has no positive i96.
-    const magnitude = Magnitude.fromRaw(@abs(ns));
+    const magnitude = Magnitude.fromRaw(@abs(instant.raw()));
     const second = magnitude.floor(.literal("1s"));
     return .{
-        .negative = ns < 0,
+        .negative = instant.compare(.epoch) == .lt,
         .whole = magnitude.convert(.second, u96, .down).raw(),
         .nanos = second.saturatingDurationTo(magnitude).raw(),
     };
