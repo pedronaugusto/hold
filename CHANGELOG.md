@@ -6,6 +6,8 @@ follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-22
+
 ### Breaking
 
 - `Extract.FsError`, and so `Extract.Error` and `Extract.extract`, hold `airlock.HardLinkError` where they held `std.Io.Dir.HardLinkError`: hard links are made through airlock.
@@ -61,7 +63,6 @@ follow [Semantic Versioning](https://semver.org/).
 - Development on preflight's ci-standard f991816 and shakedown 327bc61.
 - Properties for the README's promises over generated archives: a tar of any entries reads back as written (names past ustar's fields, modes, links, times with a fraction); a zip reads back the same through its central directory and forward by every method it writes, the forward reader refusing exactly the stored entries written streamed; an extraction of hostile names and links writes nothing outside its directory and leaves no link there leading out. Each fails on a planted fault.
 - Pins aegis dc3ed602, still 0.2.4; development on preflight's ci-standard 412a7df and glint 0.8, and shakedown ed5a873. Traps are `aegis.assert.never`, with what they rely on; an extraction holds its root as an `Unowned` directory.
-
 - Pins aegis c8982a8, still 0.2.4: six additive commits after 3c0b13e (the role declarations a linter reads, `lint_rules`), the aegis the development build's preflight selects. Nothing hold calls changed.
 - The README states hold's stability policy (0.x, tracking Zig 0.17.x; a breaking change only in a minor release, with its CHANGELOG entry; a patch release never breaks), where it said work was in progress.
 - The writers' contracts left on `std.debug.assert` (tar's octal field, blocking factor, open entry and finish; zip's finish) are `aegis.assert.invariant`: they hold in every build, where they were undefined behaviour in ReleaseFast.
