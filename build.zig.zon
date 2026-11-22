@@ -15,23 +15,23 @@
     },
     .dependencies = .{
         .aegis = .{
-            .url = "git+https://github.com/pedronaugusto/aegis#f52eabef3ec6534c3a74bea3a3b7d95a91ce2581",
-            .hash = "aegis-0.2.4-rsxouoquDQApwYDuGdd2YyEeTeNp6CnJoOZKdVCfc3jt",
+            .url = "git+https://github.com/pedronaugusto/aegis?ref=v0.4.0#4739dccd71cfc16b0c15bc27e2d7dca76de9bc21",
+            .hash = "aegis-0.4.0-rsxouv1KDgCdGc-mhY-qBfyE70ar4OQiGGKHKndirWnQ",
         },
 
         .warp = .{
-            .url = "git+https://github.com/pedronaugusto/warp#0e8a04d94b898d416b6fd9fa653bfb6aca84710e",
-            .hash = "warp-0.4.5-JASxFQzYLgCen6Fje5NOSjprQVRSX9KN1D-oIAU40Sfk",
+            .url = "git+https://github.com/pedronaugusto/warp?ref=v0.5.0#79bfe0cf2ac210a796f9848a1019cc4f2fd73376",
+            .hash = "warp-0.5.0-JASxFfRQMQAIthnbVsia4RT3GfU5N9lDoThHa549XcR-",
         },
 
         .airlock = .{
-            .url = "git+https://github.com/pedronaugusto/airlock#3ef2f541e9c487e62dd588d5675199d77bbca1ec",
-            .hash = "airlock-0.6.0-rfvu6CbQCAB-yuZ--fdaXpnGAsCzkaeqnDWRLuQUcAgH",
+            .url = "git+https://github.com/pedronaugusto/airlock?ref=v0.7.0#8019c0e6ed24aa620c62420a98da958a950e5083",
+            .hash = "airlock-0.7.0-rfvu6DswCQCgrhtw84hj7IvHgC00KxSqBU5VIftlxjlL",
         },
 
         .xenoglyph = .{
-            .url = "git+https://github.com/pedronaugusto/xenoglyph#ab4d38189cb723e4f102b611ed818380da56c750",
-            .hash = "xenoglyph-0.5.1-YKXZlcMCVABOnefwWET72nJLsmnBsMepiQwrB2Ll5HI9",
+            .url = "git+https://github.com/pedronaugusto/xenoglyph?ref=v0.6.1#f27799d23ad99c2ae2a23a5fab401c0e9efebc9e",
+            .hash = "xenoglyph-0.6.1-YKXZlR8GVADYSXwNQ3Wdc0cikk1d7nzHrYwfrCLIw_L-",
         },
     },
     .dev_dependencies = .{

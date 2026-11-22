@@ -85,6 +85,7 @@ follow [Semantic Versioning](https://semver.org/).
   are refused where they are read, with the diagnostic's `sparse_map` or
   `extra_field`; the fields a local header holds are found in the one pass
   that checks them.
+- Pins aegis 0.4.0, warp 0.5.0, airlock 0.7.0 and xenoglyph 0.6.1.
 
 ### Fixed
 
